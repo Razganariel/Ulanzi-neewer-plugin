@@ -52,8 +52,32 @@ const form = PI.boot('#property-inspector', {
  * The list of lights the plugin knows about: rename, forget, and see which one a
  * control is bound to. Adding happens through the scan results below.
  */
+/**
+ * What the table currently shows, so a broadcast saying the same thing changes nothing.
+ *
+ * @type {string|null}
+ */
+let renderedDevices = null;
+
+function deviceSignature(devices, deviceId) {
+  return devices
+    .map((device) => `${device.id}|${device.name || ''}|${device.address}|${device.id === deviceId}`)
+    .join('~');
+}
+
 function renderRegistered(devices, deviceId) {
   const body = PI.el('registered');
+  if (!body) return;
+
+  // The table is rebuilt from scratch, and rebuilding it means rebuilding the rename
+  // inputs inside it. The main service sends this list on every repaint, so a light
+  // changing state anywhere would pull the field out from under anyone halfway through
+  // naming a fixture. The address field above already guards itself against this; the
+  // rows had no such guard.
+  const signature = deviceSignature(devices, deviceId);
+  if (renderedDevices === signature) return;
+  renderedDevices = signature;
+
   body.textContent = '';
   PI.setText('registered-title', devices.length ? `Registered lights (${devices.length})` : '');
   if (!devices.length) {
