@@ -14,6 +14,8 @@ import { PLUGIN_UUID, REPAINT_DELAY_MS } from './core/constants.js';
 import { DeviceRegistry } from './core/devices.js';
 import { findByUuid } from './actions/index.js';
 import { decodeContext, ensureEntry, forget, forgetActionId } from './core/context.js';
+import { buildSettings, emptySettings } from './core/settings.js';
+import { installShutdownHandlers } from './core/shutdown.js';
 import { trace, tracePath } from './core/trace.js';
 
 const $UD = new UlanziApi();
@@ -80,16 +82,14 @@ function isEncoderContext(context, entry) {
  * `states` is the last commanded state per fixture, kept because the fixtures cannot
  * be read: they have no read command, and the one frame they volunteer carries a
  * constant. Without it the deck would come back claiming a brightness nobody chose.
+ *
+ * The rules live in core/settings.js so they can be tested; this only hands them to the
+ * host.
  */
-const globalSettings = { devices: [], activeId: '', address: '', name: '', states: {} };
+const globalSettings = emptySettings();
 
 function saveDevices(devices, activeId, states) {
-  globalSettings.devices = devices;
-  globalSettings.activeId = activeId;
-  globalSettings.states = states || {};
-  const active = devices.find((device) => device.id === activeId) || devices[0] || null;
-  globalSettings.address = active?.address || '';
-  globalSettings.name = active?.name || '';
+  Object.assign(globalSettings, buildSettings(devices, activeId, states));
   try {
     $UD.setGlobalSettings({ ...globalSettings });
   } catch (err) {
@@ -538,19 +538,6 @@ process.on('uncaughtException', (err) => {
   log(`uncaught: ${err && err.stack ? err.stack : err}`, 'error');
 });
 
-process.on('SIGINT', () => {
-  registry.stopAll();
-  process.exit(0);
-});
-
-// Closing UlanziDeck may not deliver a SIGINT to the child, so the belief about every
-// fixture is written on the way out too, whatever the reason we are leaving.
-process.on('exit', () => {
-  try {
-    registry.flush();
-  } catch {
-    /* exiting anyway */
-  }
-});
+installShutdownHandlers(registry);
 
 log('Neewer plugin main service started');
