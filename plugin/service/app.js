@@ -543,4 +543,14 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
+// Closing UlanziDeck may not deliver a SIGINT to the child, so the belief about every
+// fixture is written on the way out too, whatever the reason we are leaving.
+process.on('exit', () => {
+  try {
+    registry.flush();
+  } catch {
+    /* exiting anyway */
+  }
+});
+
 log('Neewer plugin main service started');

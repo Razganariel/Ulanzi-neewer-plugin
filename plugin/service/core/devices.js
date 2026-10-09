@@ -150,6 +150,9 @@ export class DeviceRegistry extends EventEmitter {
     this.devices.delete(id);
     this.states.delete(id);
     if (this.activeId === id) this.activeId = [...this.devices.keys()][0] || '';
+    // Written here rather than left to the debounce: this save is what makes the removal
+    // durable, and it reads the registry as it stands now, so a pending timer firing
+    // later can only rewrite the same thing.
     this._persist();
     this.emit('change', {});
     return true;
@@ -228,7 +231,19 @@ export class DeviceRegistry extends EventEmitter {
   }
 
   stopAll() {
+    // Flush before anything else. The debounced write is unref'd, so it would never
+    // run once the host exits the process: closing UlanziDeck within a second of a
+    // command would drop that command, and the next start would show a stale dial.
+    this.flush();
     for (const light of this.lights.values()) light.stop();
+  }
+
+  /** Writes any pending belief to the settings now, and cancels the timer. */
+  flush() {
+    if (!this._persistTimer) return;
+    clearTimeout(this._persistTimer);
+    this._persistTimer = null;
+    this._persist();
   }
 
   _persist() {

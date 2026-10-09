@@ -31,12 +31,24 @@ const COMMAND_TIMEOUTS = {
   status: 5000,
 };
 
+/**
+ * Longest partial line kept while waiting for its newline.
+ *
+ * A reply is one short word, an event is an address plus a frame, so a few hundred
+ * characters is already generous. Anything past that is a helper that has lost the
+ * thread, and buffering it would cost a little memory on every line for the life of
+ * the session.
+ */
+const MAX_LINE = 4096;
+
 export class NativeLink extends EventEmitter {
   constructor() {
     super();
     this.proc = null;
     this.pending = [];
     this.buffer = '';
+    /** True while the tail of an over-long line is still being thrown away. */
+    this.discarding = false;
     this.starting = null;
     this.dead = null;
   }
@@ -63,7 +75,7 @@ export class NativeLink extends EventEmitter {
       let settled = false;
       const fail = (err) => {
         this.dead = err;
-        for (const entry of this.pending.splice(0)) entry.reject(err);
+        for (const entry of this.pending.splice(0)) entry.cancel(err);
         this.proc = null;
         if (!settled) {
           settled = true;
@@ -81,7 +93,7 @@ export class NativeLink extends EventEmitter {
       child.on('exit', (code, signal) => {
         const err = new Error(`Native Bluetooth helper exited (code ${code}, signal ${signal})`);
         this.dead = err;
-        for (const entry of this.pending.splice(0)) entry.reject(err);
+        for (const entry of this.pending.splice(0)) entry.cancel(err);
         this.proc = null;
         if (!settled) {
           settled = true;
@@ -113,7 +125,23 @@ export class NativeLink extends EventEmitter {
     while ((index = this.buffer.indexOf('\n')) >= 0) {
       const line = this.buffer.slice(0, index).replace(/\r$/, '');
       this.buffer = this.buffer.slice(index + 1);
-      if (line) this._onLine(line);
+      // The line right after a purge is the tail of a line that was already thrown away,
+      // so it is skipped rather than parsed. Only the first one: anything after it is a
+      // fresh, complete line and must be read, which is what keeps a real reply from
+      // being mistaken for debris.
+      if (this.discarding) {
+        this.discarding = false;
+      } else if (line) {
+        this._onLine(line);
+      }
+    }
+    // The helper is line oriented, so a line without its newline means something is
+    // wrong upstream, and without a ceiling the partial line would grow for the life of
+    // the session. Dropping the buffer alone is not enough: the ceiling only trips once
+    // every few chunks, so the surviving tail would still be glued to the next reply.
+    if (this.buffer.length > MAX_LINE) {
+      this.buffer = '';
+      this.discarding = true;
     }
   }
 
@@ -122,40 +150,67 @@ export class NativeLink extends EventEmitter {
 
     for (const prefix of EVENT_PREFIXES) {
       if (line.startsWith(prefix)) {
+        const body = line.slice(prefix.length);
+        const space = body.indexOf(' ');
+        // A truncated event carries no address and no payload. Handing the whole line to
+        // the frame decoder instead would produce a silent empty notification, which
+        // reads as "the lamp said nothing" rather than as a protocol error.
+        if (space <= 0) return;
         if (prefix === 'notify ') {
-          const space = line.indexOf(' ', 7);
-          this.emit('notify', line.slice(7, space), hexToBuffer(line.slice(space + 1)));
+          this.emit('notify', body.slice(0, space), hexToBuffer(body.slice(space + 1)));
         } else {
-          const first = line.indexOf(' ', 7);
-          const second = line.indexOf(' ', first + 1);
-          this.emit(
-            'scanned',
-            line.slice(7, first),
-            Number(line.slice(first + 1, second)),
-            line.slice(second + 1)
-          );
+          const second = body.indexOf(' ', space + 1);
+          if (second <= 0) return;
+          this.emit('scanned', body.slice(0, space), Number(body.slice(space + 1, second)), body.slice(second + 1));
         }
         return;
       }
     }
 
+    // One line, one entry. A command that already timed out is still at the head on
+    // purpose: it swallows its own late reply so the next request is not resolved with
+    // it. Exactly one entry is consumed per line, and `return` after an abandoned one:
+    // looping would hand the very line that was supposed to be discarded to the entry
+    // behind it, which is the bug all over again.
     const entry = this.pending.shift();
-    if (!entry) return;
+    if (!entry || entry.abandoned) return;
     entry.resolve(line);
   }
 
-  /** Send one command and wait for its reply line. */
+  /**
+   * Send one command and wait for its reply line.
+   *
+   * The helper answers one line per command, in order, and there is nothing on the
+   * line to say which command it belongs to. A command that timed out therefore leaves
+   * a reply in flight: if that late line were handed to the next waiting request, it
+   * would resolve with the wrong answer and the real one would then time out too, so a
+   * single slow write would break every write after it until the service restarts.
+   *
+   * A timed-out entry is therefore kept, marked as abandoned, and swallows its own
+   * reply. The queue stays aligned and the next command is answered correctly.
+   */
   _request(command, payload, timeoutMs) {
     if (!this.proc) return Promise.reject(this.dead || new Error('Native Bluetooth helper is not running'));
     const line = `${command} ${payload}`.trim();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        const at = this.pending.findIndex((entry) => entry.resolve === onLine);
-        if (at >= 0) this.pending.splice(at, 1);
+      const entry = { resolve: null, reject, command, abandoned: false, timer: null };
+      entry.timer = setTimeout(() => {
+        // Left in place on purpose: see above. The entry is only closed if the helper
+        // never answers, which `stop()` handles for every pending entry at once.
+        entry.abandoned = true;
         reject(new Error(`Native Bluetooth helper timed out on "${line}"`));
       }, timeoutMs);
-      const onLine = (reply) => {
-        clearTimeout(timer);
+      // Every path that closes an entry must drop its timer. A request rejected by
+      // `stop()` or by the helper dying would otherwise keep the timer armed, and the
+      // service's event loop would stay alive for the full timeout after it had already
+      // given up on that command.
+      entry.cancel = (err) => {
+        clearTimeout(entry.timer);
+        entry.reject(err);
+      };
+      entry.resolve = (reply) => {
+        clearTimeout(entry.timer);
+        entry.abandoned = true;
         const space = reply.indexOf(' ');
         const head = space < 0 ? reply : reply.slice(0, space);
         if (head.startsWith(`${command}.err`) || head.startsWith('err')) {
@@ -164,7 +219,7 @@ export class NativeLink extends EventEmitter {
           resolve(reply);
         }
       };
-      this.pending.push({ resolve: onLine, reject });
+      this.pending.push(entry);
       this.proc.stdin.write(`${line}\n`);
     });
   }
@@ -208,7 +263,7 @@ export class NativeLink extends EventEmitter {
     if (!child) return;
     this.proc = null;
     for (const entry of this.pending.splice(0)) {
-      entry.reject(new Error('Native Bluetooth helper stopped'));
+      entry.cancel(new Error('Native Bluetooth helper stopped'));
     }
     try {
       child.stdin.write('quit\n');

@@ -140,6 +140,45 @@ test('a burst of notches is one write, not one per notch', () => {
   });
 });
 
+test('stopping writes the last belief before the process goes away', async () => {
+  // The debounced write is unref'd, so on the way out it never gets its turn. Closing
+  // UlanziDeck within a second of turning a dial therefore lost that dial, and the next
+  // start showed the light somewhere else than the deck had left it.
+  const { registry, store } = makeRegistry();
+  const device = registry.add({ address: 'AA:AA:AA:AA:AA:AA', name: 'Key' });
+  const light = registry.lights.get(device.id);
+  light.state = { power: true, mode: 'hsl', brightness: 5, hue: 0, saturation: 0, cct: 5600 };
+  light.emit('state', light.snapshot());
+
+  const writes = store.writes.length;
+  registry.stopAll();
+  assert.equal(store.writes.length, writes + 1, 'stopping flushed the pending write');
+  assert.equal(store.writes.at(-1).states[device.id].brightness, 5);
+
+  // Nothing may still be queued to run against a dead process.
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  assert.equal(store.writes.length, writes + 1, 'and the timer did not fire after the flush');
+});
+
+test('removing a light takes it off disk at once', async () => {
+  // The belief about a light is written a moment after the last change, so a removal has
+  // to be written on the spot: waiting would leave a light in the settings that the user
+  // had just deleted.
+  const { registry, store } = makeRegistry();
+  const device = registry.add({ address: 'AA:AA:AA:AA:AA:AA', name: 'Key' });
+  const light = registry.lights.get(device.id);
+  light.state = { power: true, mode: 'hsl', brightness: 42, hue: 0, saturation: 0, cct: 5600 };
+  light.emit('state', light.snapshot());
+
+  registry.remove(device.id);
+  const after = store.writes.at(-1);
+  assert.deepEqual(after.devices, [], 'the light is gone from the saved list');
+  assert.equal(after.states[device.id], undefined, 'and so is its remembered state');
+
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  assert.deepEqual(store.writes.at(-1).devices, [], 'and it stayed removed');
+});
+
 test('registers an unlimited number of devices', () => {
   const { registry } = makeRegistry();
   for (let i = 0; i < 12; i += 1) {
