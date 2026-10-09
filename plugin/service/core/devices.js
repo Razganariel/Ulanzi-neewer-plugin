@@ -8,7 +8,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { NeewerLight } from './light.js';
+import { COMMANDED_FIELDS, NeewerLight, sanitizeState } from './light.js';
 import { NeewerTransport, normalizeAddress } from './ble.js';
 
 let counter = 0;
@@ -29,22 +29,38 @@ function sanitize(device) {
   };
 }
 
+/** The part of a snapshot worth remembering across a restart. */
+function commandedState(snapshot) {
+  const out = {};
+  for (const field of COMMANDED_FIELDS) {
+    if (snapshot && snapshot[field] !== undefined) out[field] = snapshot[field];
+  }
+  return out;
+}
+
 export class DeviceRegistry extends EventEmitter {
   /**
-   * @param {{save: (devices: object[], activeId: string) => void}} store
-   * @param {{createLight?: (device: object) => NeewerLight}} [options]
+   * @param {{save: (devices: object[], activeId: string, states: object) => void}} store
+   * @param {{createLight?: (device: object, state: object|null) => NeewerLight}} [options]
    */
   constructor(store, options = {}) {
     super();
     this._store = store;
     // Injected so the registry can be exercised without a radio: a stub light
     // keeps the wiring testable while the real one owns the BLE link.
-    this._create = options.createLight || ((device) => new NeewerLight(device));
+    this._create = options.createLight || ((device, state) => new NeewerLight(device, state));
     /** @type {Map<string, {id:string,address:string,name:string}>} */
     this.devices = new Map();
     /** @type {Map<string, NeewerLight>} */
     this.lights = new Map();
+    /**
+     * Last commanded state per fixture, kept so a restart shows the deck what it was
+     * last told to do. The fixtures cannot be read, so this is the only value there is.
+     * @type {Map<string, object>}
+     */
+    this.states = new Map();
     this.activeId = '';
+    this._persistTimer = null;
   }
 
   /**
@@ -55,6 +71,7 @@ export class DeviceRegistry extends EventEmitter {
    */
   load(settings) {
     const raw = Array.isArray(settings?.devices) ? settings.devices : [];
+    const stored = settings?.states && typeof settings.states === 'object' ? settings.states : {};
     const list = raw.map(sanitize).filter(Boolean);
     if (!list.length) {
       const legacy = sanitize({ address: settings?.address, name: settings?.name });
@@ -62,6 +79,7 @@ export class DeviceRegistry extends EventEmitter {
     }
     for (const device of list) {
       this.devices.set(device.id, device);
+      this.states.set(device.id, sanitizeState(stored[device.id]));
       this.lights.set(device.id, this._createLight(device));
     }
     const wanted = String(settings?.activeId || '').trim();
@@ -69,10 +87,15 @@ export class DeviceRegistry extends EventEmitter {
   }
 
   _createLight(device) {
-    const light = this._create(device);
+    const light = this._create(device, this.states.get(device.id));
     // A fixture going up or down is interesting to every action bound to it, not
-    // just the one that triggered the traffic.
-    light.on('state', () => this.emit('change', { deviceId: device.id }));
+    // just the one that triggered the traffic. The same event is the moment the belief
+    // about this lamp changed, so it is also when the memory of it is worth writing.
+    light.on('state', (snapshot) => {
+      this.states.set(device.id, commandedState(snapshot));
+      this._schedulePersist();
+      this.emit('change', { deviceId: device.id });
+    });
     if (device.address) light.connect();
     return light;
   }
@@ -107,6 +130,7 @@ export class DeviceRegistry extends EventEmitter {
       return existing;
     }
     this.devices.set(candidate.id, candidate);
+    this.states.set(candidate.id, {});
     this.lights.set(candidate.id, this._createLight(candidate));
     if (!this.activeId) this.activeId = candidate.id;
     this._persist();
@@ -124,6 +148,7 @@ export class DeviceRegistry extends EventEmitter {
     this.lights.get(id)?.stop();
     this.lights.delete(id);
     this.devices.delete(id);
+    this.states.delete(id);
     if (this.activeId === id) this.activeId = [...this.devices.keys()][0] || '';
     this._persist();
     this.emit('change', {});
@@ -208,9 +233,23 @@ export class DeviceRegistry extends EventEmitter {
 
   _persist() {
     try {
-      this._store.save(this.list(), this.activeId);
+      this._store.save(this.list(), this.activeId, Object.fromEntries(this.states));
     } catch {
       /* the store reports its own failure; never break an action for it */
     }
+  }
+
+  /**
+   * A dial notch emits a state per notch, and writing the settings file on each one
+   * would put a disk write in the middle of a rotation. The memory of the belief is
+   * only needed once the user stops turning.
+   */
+  _schedulePersist() {
+    if (this._persistTimer) clearTimeout(this._persistTimer);
+    this._persistTimer = setTimeout(() => {
+      this._persistTimer = null;
+      this._persist();
+    }, 1000);
+    if (typeof this._persistTimer.unref === 'function') this._persistTimer.unref();
   }
 }

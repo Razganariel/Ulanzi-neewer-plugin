@@ -40,7 +40,8 @@ import * as cctPresets from '../plugin/service/actions/cct-presets.js';
 import * as cctUp from '../plugin/service/actions/cct-up.js';
 import * as cctDown from '../plugin/service/actions/cct-down.js';
 import * as scan from '../plugin/service/actions/scan.js';
-import { STATE } from '../plugin/service/core/constants.js';
+import * as power from '../plugin/service/actions/power.js';
+import { DEFAULTS, STATE } from '../plugin/service/core/constants.js';
 
 const manifest = JSON.parse(readFileSync(new URL('../plugin/manifest.json', import.meta.url), 'utf8'));
 const actionOf = (uuid) => manifest.Actions.find((a) => a.UUID === uuid);
@@ -259,6 +260,70 @@ test('the one-step buttons draw the value they are about to move', () => {
       `${mod.uuid} shows the current value, not a fixed label`
     );
   }
+});
+
+test('a light the plugin has never spoken to reads as OFF, not ON', () => {
+  // The regression, from a real session: the default was power: true, so starting
+  // UlanziDeck painted the key ON while the lamp was off, and the first press was
+  // swallowed sending "off" to a lamp that was already off. The toggle was one press
+  // out for the whole session.
+  assert.equal(DEFAULTS.POWER, false, 'a fixture is off until a command says otherwise');
+
+  const $UD = fakeUD();
+  power.render({ $UD, context: 'ctx', snap: snapOf({ power: DEFAULTS.POWER }) });
+  const drawn = $UD.sent.find((c) => c[0] === 'state');
+  assert.equal(drawn[1], 0, 'state 0 is the Off icon');
+  assert.equal(drawn[2], 'OFF');
+});
+
+test('one press on a fresh fixture turns it on', async () => {
+  // The whole point of the default: the toggle has to land on the lamp the first time.
+  const calls = [];
+  const light = {
+    state: { power: DEFAULTS.POWER },
+    setPower(on) { calls.push(['setPower', on]); this.state.power = on; },
+    togglePower() { return this.setPower(!this.state.power); },
+  };
+  await power.onRun({ settings: power.defaults, light, report: () => {} });
+  assert.deepEqual(calls, [['setPower', true]]);
+});
+
+test('opening a fixture writes nothing, so a lamp that is on stays on', () => {
+  // Every frame this protocol has is a command. Re-asserting the cached state on
+  // connect imposed a state instead of observing one: a colour frame switches the lamp
+  // on, a power frame switches it off, and the plugin has no way to read the truth
+  // before it speaks. The fixture reports a level on its own instead.
+  const source = readFileSync(new URL('../plugin/service/core/light.js', import.meta.url), 'utf8');
+  const connect = source.slice(source.indexOf('async connect()'), source.indexOf('async connect()') + 1400);
+  assert.doesNotMatch(connect, /_send\(/, 'connect must not write a frame');
+  assert.doesNotMatch(source, /_activeFrame/, 'the re-assertion helper is gone');
+});
+
+test('the level byte is left alone: it measures the same lit or unlit', () => {
+  // Three measurements on a real RGB62: the frame reports level 100 with the lamp on,
+  // 100 with it off, and on one run not at all. A constant is not a state, so deriving
+  // power or brightness from it would put a confident wrong number on the deck.
+  const light = readFileSync(new URL('../plugin/service/core/light.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(light, /reportedLevel/, 'no level is kept');
+  assert.doesNotMatch(light, /decoded\.level/, 'and none is acted on');
+
+  // The decoder may still describe the frame: it is the wire format, not a claim.
+  const protocol = readFileSync(new URL('../plugin/service/core/protocol.js', import.meta.url), 'utf8');
+  assert.match(protocol, /case OP\.DEVICE/, 'the frame stays documented and tested');
+});
+
+test('what the deck shows at startup is the last command, not a guess', () => {
+  // The fixtures cannot be read, so the persisted command is the only honest value.
+  // Without it the deck came back claiming brightness 100 while the lamp sat at 5, and
+  // one notch of the dial then computed 105 and wrapped the lamp down to 5.
+  const light = readFileSync(new URL('../plugin/service/core/light.js', import.meta.url), 'utf8');
+  assert.match(light, /initialState/, 'the constructor accepts a restored state');
+  assert.match(light, /sanitizeState\(initialState\)/, 'and sanitises what it is given');
+
+  const devices = readFileSync(new URL('../plugin/service/core/devices.js', import.meta.url), 'utf8');
+  assert.match(devices, /this\.states\.set\(device\.id, commandedState\(snapshot\)\)/, 'every change is remembered');
+  assert.match(devices, /Object\.fromEntries\(this\.states\)/, 'and persisted with the device list');
+  assert.match(devices, /_schedulePersist\(\)/, 'debounced, so a rotation is not a write per notch');
 });
 
 test('scan is button-only and never sends a dial readout', () => {

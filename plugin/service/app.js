@@ -76,12 +76,17 @@ function isEncoderContext(context, entry) {
  * Global settings hold the whole device list. `address` and `name` mirror the
  * default device so an installation written by an older build still reads back
  * as a single light instead of an empty registry.
+ *
+ * `states` is the last commanded state per fixture, kept because the fixtures cannot
+ * be read: they have no read command, and the one frame they volunteer carries a
+ * constant. Without it the deck would come back claiming a brightness nobody chose.
  */
-const globalSettings = { devices: [], activeId: '', address: '', name: '' };
+const globalSettings = { devices: [], activeId: '', address: '', name: '', states: {} };
 
-function saveDevices(devices, activeId) {
+function saveDevices(devices, activeId, states) {
   globalSettings.devices = devices;
   globalSettings.activeId = activeId;
+  globalSettings.states = states || {};
   const active = devices.find((device) => device.id === activeId) || devices[0] || null;
   globalSettings.address = active?.address || '';
   globalSettings.name = active?.name || '';
@@ -508,7 +513,7 @@ $UD.onSendToPlugin(async (message) => {
       return;
     }
     if (payload.event === 'set-global') {
-      saveDevices(globalSettings.devices, globalSettings.activeId);
+      saveDevices(globalSettings.devices, globalSettings.activeId, globalSettings.states);
       return;
     }
     if (payload.event === 'get-registry') {

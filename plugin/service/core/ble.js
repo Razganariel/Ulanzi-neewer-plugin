@@ -40,15 +40,25 @@ export class NeewerTransport extends EventEmitter {
     this.connected = false;
     this._queue = Promise.resolve();
     this._lastWrite = 0;
-    this._onNotify = null;
+    /**
+     * Owner's frame handler, armed for the whole life of the link.
+     *
+     * It used to be installed by `write`, which meant nothing could be heard before the
+     * first write. That is exactly the wrong way round for this fixture: it volunteers
+     * its state the moment the link comes up, so the one frame that could tell us the
+     * lamp is on or off was always dropped on the floor.
+     *
+     * @type {((data: Buffer) => void) | null}
+     */
+    this.onFrame = null;
   }
 
   async ready() {
     if (!this.link) {
       const link = new NativeLink();
       link.on('notify', (address, data) => {
-        if (this._onNotify && normalizeAddress(address) === normalizeAddress(this.address)) {
-          this._onNotify(data);
+        if (this.onFrame && normalizeAddress(address) === normalizeAddress(this.address)) {
+          this.onFrame(data);
         }
       });
       link.on('link', (up, reason) => {
@@ -108,12 +118,10 @@ export class NeewerTransport extends EventEmitter {
 
   /**
    * @param {Buffer} frame
-   * @param {(data: Buffer) => void} [onNotify]
    */
-  async write(frame, onNotify) {
+  async write(frame) {
     const run = async () => {
       if (!this.connected || !this.address) throw new Error('Neewer device is not connected');
-      if (onNotify) this._onNotify = onNotify;
 
       const wait = WRITE_GAP_MS - (Date.now() - this._lastWrite);
       if (wait > 0) await sleep(wait);
@@ -131,7 +139,6 @@ export class NeewerTransport extends EventEmitter {
     const link = this.link;
     const address = this.address;
     this.connected = false;
-    this._onNotify = null;
     this.address = null;
     this.name = '';
     if (link && address) {

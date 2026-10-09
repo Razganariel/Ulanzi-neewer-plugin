@@ -22,7 +22,12 @@ export const defaults = {
   min: LIMITS.BRIGHTNESS_MIN,
   max: LIMITS.BRIGHTNESS_MAX,
   step: 5,
-  wrap: true,
+  // Stops at the limits rather than coming back round, like the up/down buttons do:
+  // a dial parked at 100% and turned one more notch used to drop the lamp to 5%, which
+  // reads as a fault rather than as the end of the range. Nothing about brightness is
+  // cyclic, so wrapping only ever produces a jump nobody asked for. Set it back to
+  // true in the property inspector to sweep endlessly instead.
+  wrap: false,
   presets: '25,50,75,100',
 };
 

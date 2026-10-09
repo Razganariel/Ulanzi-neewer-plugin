@@ -21,25 +21,69 @@ import {
 } from './protocol.js';
 import { DEFAULTS, RECONNECT_DELAYS_MS, RECONNECT_GIVE_UP_AFTER, RECONNECT_IDLE_MS } from './constants.js';
 
+/**
+ * The fields that make up the deck's belief about a fixture, and nothing else.
+ *
+ * Link status, the address and the name are not part of it: they describe the session,
+ * not the last thing the user asked the lamp to do.
+ */
+export const COMMANDED_FIELDS = Object.freeze([
+  'power',
+  'brightness',
+  'hue',
+  'saturation',
+  'cct',
+  'mode',
+]);
+
+/**
+ * Keeps only what a fixture can actually be driven to.
+ *
+ * The blob comes out of a settings file the host owns, so a hand edit or an older
+ * layout must not be able to put a light into a state no action could ever produce.
+ */
+export function sanitizeState(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const out = {};
+  for (const field of ['power', 'brightness', 'hue', 'saturation', 'cct']) {
+    const n = Number(raw[field]);
+    if (Number.isFinite(n)) out[field] = field === 'power' ? n !== 0 : n;
+  }
+  if (raw.mode === 'hsl' || raw.mode === 'cct') out.mode = raw.mode;
+  return out;
+}
+
 export class NeewerLight extends EventEmitter {
   /**
    * @param {{address?:string, name?:string}} [device]
+   * @param {object} [initialState] last commanded state of a previous session
    */
-  constructor(device = {}) {
+  constructor(device = {}, initialState = null) {
     super();
     this.transport = new NeewerTransport();
+    // Armed here rather than on the first write: the fixture reports its own state the
+    // moment the link comes up, and waiting for a write meant that frame was dropped.
+    this.transport.onFrame = (data) => this._onNotify(data);
     this.address = normalizeAddress(device.address);
     this.name = device.name || '';
     this.connected = false;
     this.connecting = false;
     this.lastError = '';
     this.state = {
-      power: true,
+      power: DEFAULTS.POWER,
       mode: DEFAULTS.MODE,
       brightness: DEFAULTS.BRIGHTNESS,
       hue: DEFAULTS.HUE,
       saturation: DEFAULTS.SATURATION,
       cct: DEFAULTS.CCT,
+      // Restored from what the deck was last told to do.
+      //
+      // This fixture cannot be read: it has no read command, its one voluntary frame
+      // carries a constant level that measures 100 whether the lamp is lit or not, and
+      // changing it with its own buttons produces no notification. So the last command
+      // is the only honest value available at startup. It is this session's intent, not
+      // a measurement - the deck will say 50% for a lamp someone dimmed by hand.
+      ...sanitizeState(initialState),
     };
     this._reconnectAttempt = 0;
     // A light built with an address is live: the registry starts the first
@@ -110,10 +154,15 @@ export class NeewerLight extends EventEmitter {
       this.name = info.name || this.name;
       this._reconnectAttempt = 0;
       this._setLink({ connected: true, connecting: false, error: '' });
-      // Push the cached state so the fixture matches what the keys display. An
-      // off lamp is re-asserted explicitly, a colour frame would turn it on.
-      if (this.state.power) await this._send(this._activeFrame(), false);
-      else await this._send(powerFrame(false), false);
+      // Nothing is written on connect, deliberately. Every frame this protocol has is
+      // a command: a colour frame switches the lamp on, a power frame switches it off.
+      // Re-asserting the cached state here therefore imposes a state instead of
+      // observing one, which is how starting UlanziDeck with the lamp already on
+      // used to turn it off.
+      //
+      // The truth arrives without the plugin having to speak first: the fixture
+      // volunteers OP 0x05 the moment the link comes up (see `_onNotify`), and
+      // nlink has already subscribed to notifications by the time `open` returns.
     } catch (err) {
       this._setLink({ connected: false, connecting: false, error: err.message });
       this._scheduleReconnect();
@@ -138,12 +187,8 @@ export class NeewerLight extends EventEmitter {
     }, delay);
   }
 
-  _activeFrame() {
-    return brightnessFrame(this.state.mode, this.state);
-  }
-
   async _send(frame, patch = true) {
-    await this.transport.write(frame, (data) => this._onNotify(data));
+    await this.transport.write(frame);
     if (patch) {
       const next = { power: true };
       if (frame[1] === 0x86) next.mode = 'hsl';

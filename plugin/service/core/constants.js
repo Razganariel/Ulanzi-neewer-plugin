@@ -53,6 +53,12 @@ export const LIMITS = Object.freeze({
 });
 
 export const DEFAULTS = Object.freeze({
+  // false, not true: the fixture has not been spoken to yet, and the plugin can only
+  // switch a lamp on by an explicit command. Claiming "on" made the deck say ON at
+  // startup, put the toggle one press out, and made connect() push a colour frame -
+  // which is a command that switches the lamp on. Off is the only claim here that
+  // cannot surprise anyone.
+  POWER: false,
   BRIGHTNESS: 100,
   HUE: 0,
   // 0, not 100: this is what the deck shows before the light has ever reported a

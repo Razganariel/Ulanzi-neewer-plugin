@@ -7,14 +7,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DeviceRegistry } from '../plugin/service/core/devices.js';
+import { sanitizeState } from '../plugin/service/core/light.js';
 
 /** Records what would have been written to the host settings. */
 function makeStore() {
   const writes = [];
   return {
     writes,
-    save(devices, activeId) {
-      writes.push({ devices: JSON.parse(JSON.stringify(devices)), activeId });
+    save(devices, activeId, states) {
+      writes.push({
+        devices: JSON.parse(JSON.stringify(devices)),
+        activeId,
+        states: JSON.parse(JSON.stringify(states || {})),
+      });
     },
   };
 }
@@ -25,14 +30,22 @@ function makeStore() {
  * tests must not do.
  */
 class StubLight {
-  constructor(device) {
+  constructor(device, initialState) {
     this.listeners = new Map();
     this.address = String(device.address || '').toUpperCase();
     this.name = device.name || '';
     this.connected = false;
     this.connecting = false;
     this.lastError = '';
-    this.state = { power: true, mode: 'hsl', brightness: 100, hue: 0, saturation: 100, cct: 5600 };
+    this.state = {
+      power: false,
+      mode: 'hsl',
+      brightness: 100,
+      hue: 0,
+      saturation: 100,
+      cct: 5600,
+      ...sanitizeState(initialState),
+    };
     this.connects = 0;
   }
   on(event, fn) {
@@ -63,9 +76,69 @@ class StubLight {
 
 function makeRegistry() {
   const store = makeStore();
-  const registry = new DeviceRegistry({ save: store.save }, { createLight: (d) => new StubLight(d) });
+  const registry = new DeviceRegistry({ save: store.save }, { createLight: (d, s) => new StubLight(d, s) });
   return { registry, store };
 }
+
+test('a restart brings back the last command, not a made up value', () => {
+  // The fixtures cannot be read, so the memory of what the deck was last told to do is
+  // all there is. Without it the dial came back claiming 100% against a lamp at 5.
+  const first = makeRegistry();
+  const device = first.registry.add({ address: 'AA:AA:AA:AA:AA:AA', name: 'Key' });
+  const light = first.registry.lights.get(device.id);
+  light.state = { power: true, mode: 'hsl', brightness: 40, hue: 0, saturation: 0, cct: 5600 };
+  light.emit('state', light.snapshot());
+  first.registry._persist();
+
+  const saved = first.store.writes.at(-1);
+  assert.deepEqual(saved.states[device.id], {
+    power: true,
+    mode: 'hsl',
+    brightness: 40,
+    hue: 0,
+    saturation: 0,
+    cct: 5600,
+  });
+
+  // A second process, same settings: the light starts on the remembered values.
+  const second = makeRegistry();
+  second.registry.load({ devices: saved.devices, activeId: saved.activeId, states: saved.states });
+  const restored = second.registry.lights.get(device.id);
+  assert.equal(restored.state.brightness, 40);
+  assert.equal(restored.state.power, true);
+});
+
+test('a state file that makes no sense cannot put a light in a state no action could', () => {
+  const { registry, store } = makeRegistry();
+  registry.load({
+    devices: [{ id: 'x1', address: 'AA:AA:AA:AA:AA:AA', name: 'Key' }],
+    activeId: 'x1',
+    states: {
+      x1: { power: 0, brightness: 'bright', hue: null, mode: 'strobe', cct: 99999, address: 'nope' },
+    },
+  });
+  const light = registry.lights.get('x1');
+  assert.equal(light.state.power, false, '0 is off, not a missing value');
+  assert.equal(light.state.mode, 'hsl', 'an unknown mode falls back');
+  assert.equal(light.state.brightness, 100, 'a non-number is ignored');
+  assert.equal(light.state.cct, 99999, 'out of range numbers are left to the protocol');
+  assert.equal(store.writes.length, 0, 'loading is not a write');
+});
+
+test('a burst of notches is one write, not one per notch', () => {
+  const { registry, store } = makeRegistry();
+  const device = registry.add({ address: 'AA:AA:AA:AA:AA:AA', name: 'Key' });
+  const light = registry.lights.get(device.id);
+  const writes = store.writes.length;
+  for (let i = 0; i < 30; i += 1) light.emit('state', light.snapshot());
+  assert.equal(store.writes.length, writes, 'nothing written while the dial is still turning');
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      assert.ok(store.writes.length > writes, 'and the last belief is written once it settles');
+      resolve();
+    }, 1200);
+  });
+});
 
 test('registers an unlimited number of devices', () => {
   const { registry } = makeRegistry();

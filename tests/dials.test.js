@@ -172,23 +172,34 @@ test('the walk reaches an entry appended below the others, on every dial', async
 
 test('rotation is untouched by the preset walk', async () => {
   // The walk only ever runs on a press. A rotation must keep behaving exactly as it
-  // did: a signed step off the current value, wrapped at the bounds by default and
-  // clamped when the user asked for that instead.
+  // did: a signed step off the current value, and clamped at the bounds by default.
   const up = L({ hue: 350, saturation: 100, brightness: 100 });
   await hue.onDialRotate(ctxFor(up, hue.defaults), RIGHT);
   assert.deepEqual(up.calls, [['setHsl', 360, 100, 100]], 'raw value, normalised inside the protocol');
 
-  const wrapped = L({ brightness: 2 });
-  await brightness.onDialRotate(ctxFor(wrapped, brightness.defaults), LEFT);
-  assert.deepEqual(wrapped.calls, [['setBrightness', 97]], 'wrap is the default, so 2 - 5 comes back round');
-
   const clamped = L({ brightness: 2 });
-  await brightness.onDialRotate(ctxFor(clamped, { ...brightness.defaults, wrap: false }), LEFT);
-  assert.deepEqual(clamped.calls, [['setBrightness', 1]], 'clamped when wrap is turned off');
+  await brightness.onDialRotate(ctxFor(clamped, brightness.defaults), LEFT);
+  assert.deepEqual(clamped.calls, [['setBrightness', 1]], 'stops at the low end');
+
+  const wrapped = L({ brightness: 2 });
+  await brightness.onDialRotate(ctxFor(wrapped, { ...brightness.defaults, wrap: true }), LEFT);
+  assert.deepEqual(wrapped.calls, [['setBrightness', 97]], 'comes round only when asked to');
 
   const ignored = L({ hue: 0 });
   await hue.onDialRotate(ctxFor(ignored, hue.defaults), { rotateEvent: 'none' });
   assert.equal(ignored.calls.length, 0, 'an event that is not a rotation moves nothing');
+});
+
+test('a dial parked at the top does not drop the lamp to the bottom', () => {
+  // The report: with the deck claiming 100% and wrap on, one notch forward produced
+  // 105 -> 5, so the lamp fell to its dimmest. Nothing about brightness is cyclic, and
+  // the up/down buttons already stopped at the limits; the dial now agrees with them.
+  const atTop = L({ brightness: 100 });
+  return brightness
+    .onDialRotate(ctxFor(atTop, brightness.defaults), RIGHT)
+    .then(() => {
+      assert.deepEqual(atTop.calls, [['setBrightness', 100]], 'and stays at the top');
+    });
 });
 
 test('rotateSteps is still the only decoder, holds included', () => {
