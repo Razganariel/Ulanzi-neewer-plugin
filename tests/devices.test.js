@@ -179,6 +179,88 @@ test('removing a light takes it off disk at once', async () => {
   assert.deepEqual(store.writes.at(-1).devices, [], 'and it stayed removed');
 });
 
+test('a scan shuts the helper it started', async () => {
+  // Every scan builds its own transport, and `nlink.exe` only exits when its stdin
+  // closes. A scan that did not clean up left one process per click, alive until the
+  // deck was closed, holding a handle on the radio adapter the whole time.
+  const disposed = [];
+  const registry = new DeviceRegistry(
+    { save() {} },
+    {
+      createLight: (d, s) => new StubLight(d, s),
+      createTransport: () => ({
+        async scan() {
+          return [{ address: 'AA:BB:CC:DD:EE:FF', name: 'NEEWER RGB62', rssi: -50 }];
+        },
+        async dispose() {
+          disposed.push(true);
+        },
+      }),
+    }
+  );
+
+  const found = await registry.scan({ duration: 1000, onlyNeewer: true });
+
+  assert.equal(found.length, 1, 'the scan itself still works');
+  assert.equal(disposed.length, 1, 'and the helper it started was shut down');
+});
+
+test('a scan that fails still shuts its helper down', async () => {
+  // Otherwise the failures are the ones that leak: a radio that is off, or a fixture
+  // that refuses, is exactly when the user retries.
+  const disposed = [];
+  const registry = new DeviceRegistry(
+    { save() {} },
+    {
+      createLight: (d, s) => new StubLight(d, s),
+      createTransport: () => ({
+        async scan() {
+          throw new Error('radio is off');
+        },
+        async dispose() {
+          disposed.push(true);
+        },
+      }),
+    }
+  );
+
+  await assert.rejects(registry.scan({ duration: 1000 }), /radio is off/);
+  assert.equal(disposed.length, 1, 'the helper was shut down even though the scan failed');
+});
+
+test('a scan never borrows a fixture transport', async () => {
+  // Discovery is adapter-wide. If it reused a fixture's transport, disposing it after the
+  // scan would drop that fixture's link, and every Scan press would unlink a lamp.
+  const scanned = { id: 'scan-transport', disposed: false };
+  const registry = new DeviceRegistry(
+    { save() {} },
+    {
+      createLight: (d, s) => {
+        const light = new StubLight(d, s);
+        light.transport = { id: 'fixture-transport' };
+        return light;
+      },
+      createTransport: () => ({
+        id: scanned.id,
+        async scan() {
+          return [];
+        },
+        async dispose() {
+          scanned.disposed = true;
+        },
+      }),
+    }
+  );
+
+  const device = registry.add({ address: 'AA:AA:AA:AA:AA:AA', name: 'Key' });
+  const fixture = registry.lights.get(device.id).transport;
+  await registry.scan({ duration: 1000 });
+
+  assert.notEqual(fixture.id, scanned.id, 'the scan had a transport of its own');
+  assert.equal(scanned.disposed, true, 'the scan transport was the one disposed');
+  assert.equal(fixture.id, 'fixture-transport', 'the fixture link was left alone');
+});
+
 test('registers an unlimited number of devices', () => {
   const { registry } = makeRegistry();
   for (let i = 0; i < 12; i += 1) {

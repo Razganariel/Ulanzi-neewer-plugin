@@ -45,8 +45,10 @@ test('the frame the fixture volunteers changes nothing', () => {
  */
 function fakeTransport() {
   const writes = [];
+  const calls = [];
   return {
     writes,
+    calls,
     address: null,
     onFrame: null,
     async connect(address) {
@@ -57,6 +59,12 @@ function fakeTransport() {
       writes.push(frame);
     },
     async close() {},
+    async disconnect() {
+      calls.push('disconnect');
+    },
+    async dispose() {
+      calls.push('dispose');
+    },
     on() {},
   };
 }
@@ -85,6 +93,36 @@ test('a reconnect after a drop still does not impose a state', async () => {
 
   assert.deepEqual(transport.writes, [], 'a second link is as silent as the first');
   assert.equal(light.state.brightness, 40);
+});
+
+test('a forgotten light takes its helper process with it', async () => {
+  // `nlink.exe` only exits when its stdin closes, and nothing else closes it. A light
+  // that was merely disconnected left its helper running for the rest of the session,
+  // so removing lights, or closing the deck, piled up processes nobody could see.
+  const transport = fakeTransport();
+  const light = new NeewerLight({ address: 'AA:BB:CC:DD:EE:FF' }, null, transport);
+  await light.connect();
+
+  light.stop();
+  await Promise.resolve();
+
+  assert.deepEqual(transport.calls, ['dispose'], 'the helper was shut down, not just unlinked');
+});
+
+test('a light that is only reconnected keeps its helper', async () => {
+  // The counterpart: dispose is terminal. Reconnecting or moving to another address
+  // must keep the process, or every retry would spawn a new one.
+  const transport = fakeTransport();
+  const light = new NeewerLight({ address: 'AA:BB:CC:DD:EE:FF' }, null, transport);
+  await light.connect();
+  await light.reconnect();
+  await light.setAddress('AA:BB:CC:DD:EE:00');
+
+  assert.equal(
+    transport.calls.includes('dispose'),
+    false,
+    `nothing was disposed along the way, got ${JSON.stringify(transport.calls)}`
+  );
 });
 
 test('a power notification does move the state, unlike the level frame', () => {

@@ -308,8 +308,14 @@ export class NeewerLight extends EventEmitter {
     await this.connect();
   }
 
+  /**
+   * Terminal: this light is being forgotten, so its helper goes with it.
+   *
+   * `disconnect` would only close the BLE link, and the helper process stays alive
+   * until its stdin closes. Callers do not await this, so it must not reject.
+   */
   stop() {
     this._stopped = true;
-    this.transport.disconnect();
+    Promise.resolve(this.transport.dispose()).catch(() => {});
   }
 }
