@@ -9,7 +9,7 @@
  */
 
 const editor = presetEditor({
-  value: { label: 'Brightness', name: 'Value', unit: '%', min: 1, max: 100 },
+  value: { label: 'Brightness', name: 'Value', min: 1, max: 100 },
 });
 
 PI.boot('#property-inspector', {

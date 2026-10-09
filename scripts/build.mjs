@@ -137,7 +137,45 @@ async function main() {
   }
   console.log(`[build] service modules parsed (${modules.length} files)`);
 
-  if (!skipInstall) {
+  // The property inspectors are classic scripts loaded by a WebView, one per action, and
+  // a syntax error in one leaves that panel blank with the deck reporting nothing. They
+  // were copied and never parsed, which is the same blindness the service check above
+  // exists to remove.
+  const inspectorDir = path.join(out, 'property-inspector');
+  const inspectorModules = await collectJs(inspectorDir);
+  for (const file of inspectorModules) {
+    try {
+      await run(process.execPath, ['--check', file], { maxBuffer: 1024 * 1024 });
+    } catch (err) {
+      console.error(`[build] ${path.relative(out, file)}`);
+      console.error(String(err.stderr || err.message).trim());
+      throw new Error('property inspector does not parse, refusing to ship a panel that cannot start');
+    }
+  }
+  console.log(`[build] property inspector modules parsed (${inspectorModules.length} files)`);
+
+  // The plugin's own icon is shown on the deck; nothing else in this build looks at it.
+  await requirePath(path.join(out, manifest.Icon), 'plugin icon');
+
+  // The version is written in three places and a disagreement is invisible until someone
+  // reports the wrong build. Cheap to compare now.
+  const versions = {
+    'manifest.json': JSON.parse(await readFile(path.join(out, 'manifest.json'), 'utf8')).Version,
+    'plugin/package.json': JSON.parse(await readFile(path.join(out, 'package.json'), 'utf8')).version,
+  };
+  const distinct = [...new Set(Object.values(versions))];
+  if (distinct.length > 1) {
+    throw new Error(
+      `version mismatch: ${Object.entries(versions).map(([f, v]) => `${f} ${v}`).join(', ')}`
+    );
+  }
+  console.log(`[build] version ${distinct[0]} consistent`);
+
+  if (skipInstall) {
+    // Said plainly, because INSTALL.txt still tells the user to copy the folder: without
+    // this step the output has no node_modules and the service cannot even be imported.
+    console.warn('[build] --skip-install: the output has no runtime dependencies and will not start');
+  } else {
     // No npm required: scripts/install-deps.mjs pulls the tarballs straight from
     // the registry. npm is used when available because it is the reference resolver.
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';

@@ -9,7 +9,7 @@
  */
 
 const editor = presetEditor({
-  value: { label: 'Saturation', name: 'Value', unit: '%', min: 0, max: 100 },
+  value: { label: 'Saturation', name: 'Value', min: 0, max: 100 },
 });
 
 PI.boot('#property-inspector', {

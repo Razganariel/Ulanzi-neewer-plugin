@@ -7,9 +7,8 @@
  */
 
 const editor = presetEditor({
-  value: { label: 'Temperature', unit: 'K', min: 2500, max: 8500 },
-  third: { label: 'Brightness', unit: '%', min: 1, max: 100 },
-  title: 'brightness',
+  value: { label: 'Temperature', min: 2500, max: 8500 },
+  third: { label: 'Brightness', min: 1, max: 100 },
 });
 
 PI.boot('#property-inspector', {

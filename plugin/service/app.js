@@ -321,20 +321,24 @@ $UD.onDidReceiveSettings((message) => {
   // Same instance on a key we did not know about yet: the settings arrived
   // before any add, so treat it as a placement and draw the key.
   forgetActionId(contexts, decodeContext(context).actionid, context);
-  entry.settings = { ...entry.action.defaults, ...(message.settings || {}) };
+  // `ensureEntry` has already merged the defaults, whatever the instance was carrying and
+  // what just arrived. Rebuilding it from the defaults and the message alone threw the
+  // rest away: a message that does not mention every setting - a panel saving one field,
+  // or the preset rows being saved without the dial's own bounds - silently reset
+  // everything it left out to its default.
   $UD.sendParamFromPlugin(entry.settings, context);
   refresh(context);
 });
 
 $UD.onParamFromApp((message) => {
   const context = message.context;
-  const { entry, created } = ensureEntry(contexts, context, { uuid: message.uuid, param: message.param }, (uuid) => findByUuid(uuid));
+  const { entry } = ensureEntry(contexts, context, { uuid: message.uuid, param: message.param }, (uuid) => findByUuid(uuid));
   if (!entry) return;
   // paramfromapp is what the host sends right after a move, once the property
   // inspector hydrates. It carries no add, so the ghost of the previous key is
   // still registered here and has to go.
   forgetActionId(contexts, decodeContext(context).actionid, context);
-  entry.settings = { ...entry.action.defaults, ...(message.param || {}) };
+  // Merged, not rebuilt: see the handler above.
   refresh(context);
 });
 

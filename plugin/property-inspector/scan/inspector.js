@@ -132,7 +132,9 @@ PI.on('scan', 'click', () => {
   $UD.sendToPlugin({
     event: 'scan',
     duration: Number(params.duration) || 6,
-    onlyNeewer: params.onlyNeewer !== 'false',
+    // The form field is `only`; the payload key is `onlyNeewer`, which is what the
+    // service reads for this button. The two were once the same word and then were not.
+    onlyNeewer: params.only !== 'false',
   });
 });
 

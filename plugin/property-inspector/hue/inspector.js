@@ -11,8 +11,8 @@
  */
 
 const editor = presetEditor({
-  value: { label: 'Hue', name: 'Colour', unit: '°', min: 0, max: 359 },
-  third: { label: 'saturation', unit: '%', min: 0, max: 100 },
+  value: { label: 'Hue', name: 'Colour', min: 0, max: 359 },
+  third: { label: 'saturation', min: 0, max: 100 },
 });
 
 PI.boot('#property-inspector', {

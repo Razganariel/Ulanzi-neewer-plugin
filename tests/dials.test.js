@@ -9,7 +9,6 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { DEFAULTS } from '../plugin/service/core/constants.js';
 import { rotateSteps, walkList } from '../plugin/service/core/dial.js';
 import * as hue from '../plugin/service/actions/hue.js';

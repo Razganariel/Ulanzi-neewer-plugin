@@ -72,8 +72,14 @@
     const addButton = document.getElementById('preset-add');
     const hasThird = Boolean(spec.third);
     const hasNames = spec.names ?? hasThird;
-    /** What this panel last sent, so the host echo does not rebuild the rows. */
-    let emitted = null;
+    /**
+     * The stored list the rows on screen were built from.
+     *
+     * `null` until the first draw, so the opening settings always build the rows. After
+     * that it is what makes an echo a no-op: any settings message carrying the same list
+     * is describing the rows that are already there.
+     */
+    let drawn = null;
 
     /**
      * Builds one editable row.
@@ -249,9 +255,10 @@
         names.push(entry.name || `${spec.value.name || 'Scene'} ${index + 1}`);
       });
       const presets = packed.join(',');
-      // Recorded before sending: the echo that follows must not rebuild the rows.
-      emitted = presets;
       clearStatus();
+      // The rows already show exactly this, so the echo that follows is describing what is
+      // on screen. Saying so keeps `render` from rebuilding them under the caret.
+      drawn = presets;
       const settings = { ...withoutRowFields(PI.read()), presets };
       // A single value list has nowhere to show a name, so it does not get one stored.
       if (hasNames) settings.presetNames = names.join(',');
@@ -259,7 +266,12 @@
       return true;
     }
 
-    /** Strips the per-row inputs so they are never persisted as settings of their own. */
+    /**
+     * Strips the per-row inputs so they are never persisted as settings of their own.
+     *
+     * `shared.js` applies the same rule on the automatic save path; this one guards the
+     * explicit Save, which is the only place these values are ever meant to be read.
+     */
     function withoutRowFields(settings) {
       const out = { ...settings };
       for (const key of Object.keys(out)) {
@@ -273,11 +285,17 @@
       return `Preset ${n + 1}`;
     }
 
-    /** Rebuilds the rows from the stored string, unless this panel wrote it. */
+    /** Rebuilds the rows only when the stored list really changed. */
     function render(settings) {
       const stored = String(settings.presets ?? '');
-      if (emitted !== null && stored === emitted) return;
-      emitted = null;
+      // Every settings message redraws the form, and the host echoes one back after any
+      // unrelated edit - changing the device, the step, the bounds. Rebuilding on those
+      // threw away whatever the user had typed into the rows without saving it, which is
+      // the opposite of what a panel with an explicit Save button should do. The stored
+      // string is what the rows were last built from, so an echo that says the same
+      // thing changes nothing and is ignored.
+      if (drawn !== null && stored === drawn) return;
+      drawn = stored;
       clearStatus();
       const names = String(settings.presetNames ?? '')
         .split(',')

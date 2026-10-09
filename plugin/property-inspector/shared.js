@@ -51,6 +51,25 @@
   let repack = null;
   let sendParams = () => {};
 
+  /**
+   * Strips the per-row preset inputs so they are never persisted as settings.
+   *
+   * Their names are positional (`p0_name`, `p1_value`, ...), so they turn up in every read
+   * of the form. The preset editor strips them on its own Save; this is the same rule on
+   * the automatic path, which is where they used to leak into the action's settings and
+   * stay there, since deleting a row only ever lowers the highest index.
+   *
+   * @param {object} settings
+   * @returns {object} a copy without the row fields
+   */
+  function withoutRowFields(settings) {
+    const out = { ...settings };
+    for (const key of Object.keys(out)) {
+      if (/^p\d+_(name|value|third)$/.test(key)) delete out[key];
+    }
+    return out;
+  }
+
   function bootForm(form, options) {
     sendParams = Utils.debounce((params) => $UD.sendParamFromPlugin(params), 150);
     activeForm = form;
@@ -65,7 +84,13 @@
 
     const collect = () => {
       const raw = Utils.getFormValue(form);
-      return repack ? repack(raw) : raw;
+      // The preset rows live inside the form and are named after their position, so a
+      // plain read collects them. Saving one of them here wrote `p0_name`, `p0_value` and
+      // friends into the action's settings, where they were merged and stored: junk keys
+      // that nothing ever read and that were never removed, since deleting a row only ever
+      // lowers the highest index. The editor's own Save had been stripping them; this is
+      // the same rule applied to every automatic save.
+      return repack ? repack(withoutRowFields(raw)) : withoutRowFields(raw);
     };
 
     // Panels that are nothing but a preset list opt out of automatic saving wholly.
@@ -145,9 +170,16 @@
       const raw = activeForm ? Utils.getFormValue(activeForm) : {};
       return repack ? repack(raw) : raw;
     },
-    /** Hands settings to the main service, debounced like the automatic path. */
+    /**
+     * Hands settings to the main service, on an explicit press.
+     *
+     * Not debounced, and not sharing the automatic path's timer. That timer exists to
+     * coalesce a burst of edits, but a Save is one deliberate act: sharing the timer meant
+     * a Save followed by any other change inside 150 ms was dropped, and the row it saved
+     * was lost with nothing said anywhere.
+     */
     push(settings) {
-      sendParams(settings);
+      $UD.sendParamFromPlugin(settings);
     },
     on(id, event, fn) {
       const node = document.getElementById(id);

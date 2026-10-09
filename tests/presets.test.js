@@ -317,6 +317,35 @@ test('settings arriving from elsewhere do rebuild the rows', () => {
   assert.equal(rowInputs(dom, 0)[1].value, '5600');
 });
 
+test('an echo about something else leaves a half typed row alone', () => {
+  // Changing the device, the step or the bounds saves automatically, and the host answers
+  // with the settings it stored. That answer describes the presets, which have not moved,
+  // so rebuilding the rows would silently discard whatever was being typed - the exact
+  // opposite of what an explicit Save button is for.
+  const { editor, dom } = mount();
+  editor.render({ presets: '3400:28', presetNames: 'A' });
+  editor.addRow();
+  type(dom, 1, 'name', 'Sunset');
+  type(dom, 1, 'value', '4500');
+  const before = dom.registry.get('preset-rows').querySelectorAll('tr')[1];
+
+  editor.render({ presets: '3400:28', presetNames: 'A', device: 'lamp-2', step: '10' });
+
+  const after = dom.registry.get('preset-rows').querySelectorAll('tr')[1];
+  assert.equal(after, before, 'the row under the cursor is the same node');
+  assert.equal(after.querySelector('[data-field="name"]').value, 'Sunset', 'and still holds what was typed');
+});
+
+test('an echo that really changed the presets does rebuild the rows', () => {
+  // The counterpart, so the rule above cannot be met by simply never rebuilding: when the
+  // stored list has moved, the rows are stale and have to follow.
+  const { editor, dom } = mount();
+  editor.render({ presets: '3400:28', presetNames: 'A' });
+  editor.render({ presets: '3400:28,5600:70', presetNames: 'A,Daylight', device: 'lamp-2' });
+  assert.equal(dom.registry.get('preset-rows').querySelectorAll('tr').length, 2, 'the added preset is shown');
+  assert.equal(rowInputs(dom, 1)[1].value, '5600');
+});
+
 test('the per-row inputs are never persisted as settings of their own', () => {
   const { editor, sent } = mount();
   editor.render({ presets: '3400:28', presetNames: 'A' });

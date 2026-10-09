@@ -7,9 +7,8 @@
  */
 
 const editor = presetEditor({
-  value: { label: 'Hue', unit: '°', min: 0, max: 359 },
-  third: { label: 'Saturation', unit: '%', min: 0, max: 100 },
-  title: 'saturation',
+  value: { label: 'Hue', min: 0, max: 359 },
+  third: { label: 'Saturation', min: 0, max: 100 },
 });
 
 PI.boot('#property-inspector', {
