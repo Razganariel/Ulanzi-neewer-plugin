@@ -121,6 +121,16 @@ test('a scene added below the others still comes up', async () => {
   );
 });
 
+test('every dial answers a press, and none of them answers a key press', () => {
+  // A dial press is its own host event: the host never sends onRun for an encoder, so
+  // the hook has to exist on all four and only on the press side. A dial action that
+  // grew an onRun would be one a button could silently drive.
+  for (const mod of [brightness, saturation, hue, cct]) {
+    assert.equal(typeof mod.onDialPress, 'function', `${mod.uuid} answers a dial press`);
+    assert.equal(mod.onRun, undefined, `${mod.uuid} answers no key press`);
+  }
+});
+
 test('the preset walk is stepped by position, not by value', () => {
   // The concept shared by every dial: one step along the list from the entry in use,
   // wrapping at the end. A value search would skip anything the user entered out of
@@ -544,15 +554,3 @@ test('saturation starts from 0, not from full colour', async () => {
   assert.equal(saturation.defaults.presets.split(',')[0], '0', 'the list starts at the same 0');
 });
 
-test('a dial press is a separate host event from a key press', () => {
-  // Guards the wiring: app.js must route onDialUp to onDialPress, because the
-  // host never sends onRun for an encoder.
-  const app = readFileSync(new URL('../plugin/service/app.js', import.meta.url), 'utf8');
-  assert.match(app, /onDialUp\(/, 'app.js listens for the dial press event');
-  assert.match(app, /onDialPress/, 'and routes it to the action hook');
-  for (const mod of [brightness, saturation, hue]) {
-    assert.equal(typeof mod.onDialPress, 'function', `${mod.uuid} answers a dial press`);
-  }
-  // CCT dial has its presets on press, too.
-  assert.equal(typeof cct.onDialPress, 'function', 'cct answers a dial press');
-});

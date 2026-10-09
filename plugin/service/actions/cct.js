@@ -88,12 +88,6 @@ export function parseScenes(raw, min, max) {
   return out;
 }
 
-/** The scenes the buttons use as their default list. */
-export const PRESET_DEFAULTS = Object.freeze({
-  presets: '3400:28,4500:16,5000:16,5600:28,6500:100',
-  presetNames: 'Candle,Sunset,Afternoon light,Sunlight,Cold blue light',
-});
-
 /**
  * Walks the scene list by one, wrapping at the end. Shared by `cct-presets.js` and
  * this module's own dial press, so the two cannot drift apart.

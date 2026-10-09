@@ -158,7 +158,7 @@ Les notifications `0x81` (marche/arrêt) n'arrivent qu'en **réponse à une comm
 
 ### Autres limites
 
-- **Le transport est natif.** `noble` ne parvenait pas à découvrir les caractéristiques de la RGB62 alors que WinRT énumérait les mêmes services et caractéristiques sans difficulté. La cause était la couche noble, pas la lampe ni Windows. `nlink.exe` (C++/WinRT) prend désormais le relais ; les 8 trames du protocole ont été validées physiquement par ce chemin. Voir `docs/session-2026-09-28-bluetooth.md`.
+- **Le transport est natif.** `noble` ne parvenait pas à découvrir les caractéristiques de la RGB62 alors que WinRT énumérait les mêmes services et caractéristiques sans difficulté. La cause était la couche noble, pas la lampe ni Windows. `nlink.exe` (C++/WinRT) prend désormais le relais ; les trames du protocole ont été validées physiquement par ce chemin. Voir `docs/session-2026-09-28-bluetooth.md`.
 - **L'appairage Windows est requis.** Contrepartie directe du passage à `FromBluetoothAddressAsync` : la lampe doit être connue de l'OS. C'est la seule limite introduite par ce transport.
 - La **validation multi-appareils reste à faire** : l'architecture est en place (un lien, une file d'écriture et un état mémorisé par lampe), mais une seule RGB62 a été testée.
 - Les **effets FX** (Cop Car, Candlelight, Hue Loop…) ne sont pas exposés : les trames longues correspondantes n'ont pas été vérifiées sur la RGB62. Le module `protocol.js` a la place pour les ajouter (`OP.EFFECT`).
@@ -192,12 +192,22 @@ plugin/                             source du plugin
   property-inspector/
     shared.js, shared.css           bootstrap commun des pages, sélecteur de lampe
     <action>/inspector.html         une page + un script par action
+  property-inspector/
+    shared.js, shared.css           bootstrap commun des pages, sélecteur de lampe
+    stepper.js                      inspecteur commun aux boutons « un cran »
+    presets.js                      inspecteur commun aux listes de presets
 scripts/
   install-sdk.mjs                   télécharge les SDK officiels (sans git)
   build.mjs                         assemblage + validation + npm install
-tests/protocol.test.js              tests unitaires sur les octets
-tests/deps.test.js                  résolveur semver npm-free
-tests/devices.test.js               registre multi-lampes (avec light stub, sans radio)
+tests/protocol.test.js              les octets des trames, et leur checksum
+tests/params.test.js               clamps, pas de molette, listes, bornes
+tests/dials.test.js                ce que chaque molette écrit, rotation et pression
+tests/render.test.js               ce que chaque touche dessine, et le routage
+tests/light.test.js                une session de lampe, sans radio ni navigateur
+tests/devices.test.js              registre multi-lampes et état mémorisé (light stub)
+tests/presets.test.js              l'éditeur de lignes, sans navigateur
+tests/context.test.js              résolution des contextes hôte
+tests/deps.test.js                 résolveur semver npm-free
 
 sdk/                                généré : ulanzi-api/, common-html/
 release/                            généré : com.ulanzi.ulanzistudio.neewer.ulanziPlugin/

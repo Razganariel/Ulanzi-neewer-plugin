@@ -31,14 +31,6 @@ const COMMAND_TIMEOUTS = {
   status: 5000,
 };
 
-export function nativeExecutable() {
-  return EXE;
-}
-
-export function nativeAvailable() {
-  return process.platform === 'win32' && fs.existsSync(EXE);
-}
-
 export class NativeLink extends EventEmitter {
   constructor() {
     super();

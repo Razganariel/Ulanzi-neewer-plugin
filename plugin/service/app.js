@@ -544,4 +544,3 @@ process.on('SIGINT', () => {
 });
 
 log('Neewer plugin main service started');
-export { $UD, registry };
