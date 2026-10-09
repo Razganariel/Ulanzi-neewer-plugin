@@ -12,6 +12,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DEFAULTS } from '../plugin/service/core/constants.js';
 import * as hue from '../plugin/service/actions/hue.js';
+import * as huePresets from '../plugin/service/actions/hue-presets.js';
+import * as hueUp from '../plugin/service/actions/hue-up.js';
+import * as hueDown from '../plugin/service/actions/hue-down.js';
 import * as saturation from '../plugin/service/actions/saturation.js';
 import * as saturationUp from '../plugin/service/actions/saturation-up.js';
 import * as saturationDown from '../plugin/service/actions/saturation-down.js';
@@ -27,6 +30,9 @@ const L = (snap) => ({
   calls: [],
   state: { connected: true, mode: 'hsl', hue: 0, saturation: 100, brightness: 100, cct: 5600, ...snap },
   // Mirrors light.js: an omitted argument means "keep the current value".
+  // Deliberately does not normalise the hue: setHsl does that inside light.js, so
+  // a step that runs off the end of the wheel is asserted here as the raw value the
+  // dial asked for and is asserted normalised in protocol.test.js.
   setHsl(h, s, b) {
     this.calls.push(['setHsl', h ?? this.state.hue, s ?? this.state.saturation, b ?? this.state.brightness]);
   },
@@ -69,19 +75,21 @@ test('hue dial ignores an unknown rotation', async () => {
   assert.equal(light.calls.length, 0);
 });
 
-test('hue press advances to the next preset and wraps', async () => {
+test('hue dial press advances to the next preset and wraps', async () => {
+  // A dial press is its own host event (onDialUp), not a key press: the action is
+  // Encoder-only, so onRun would never fire for it.
   const light = L({ hue: 60 });
-  await hue.onRun(ctxFor(light, { ...hue.defaults, presets: '0,60,120' }));
+  await hue.onDialPress(ctxFor(light, { ...hue.defaults, presets: '0,60,120' }));
   assert.deepEqual(light.calls, [['setHsl', 120, 100, 100]]);
 
   const last = L({ hue: 120 });
-  await hue.onRun(ctxFor(last, { ...hue.defaults, presets: '0,60,120' }));
+  await hue.onDialPress(ctxFor(last, { ...hue.defaults, presets: '0,60,120' }));
   assert.deepEqual(last.calls, [['setHsl', 0, 100, 100]]);
 });
 
-test('hue press with no preset configured does nothing', async () => {
+test('hue dial press with no preset configured does nothing', async () => {
   const light = L();
-  await hue.onRun(ctxFor(light, { ...hue.defaults, presets: '' }));
+  await hue.onDialPress(ctxFor(light, { ...hue.defaults, presets: '' }));
   assert.equal(light.calls.length, 0);
 });
 
@@ -89,6 +97,40 @@ test('hue preset helper targets a single hue', async () => {
   const light = L();
   await hue.applyPreset(ctxFor(light, hue.defaults), 240);
   assert.deepEqual(light.calls, [['setHsl', 240, 100, 100]]);
+});
+
+test('the Hue Presets key walks the list the dial press does', async () => {
+  // Same helper on purpose: a dedicated key that drifted from the dial's own press
+  // would make the two disagree about what the next preset is.
+  const key = L({ hue: 30 });
+  await huePresets.onRun(ctxFor(key, { ...huePresets.defaults, presets: '0,30,60,120' }));
+  assert.deepEqual(key.calls, [['setHsl', 60, 100, 100]]);
+
+  const dial = L({ hue: 30 });
+  await hue.onDialPress(ctxFor(dial, { ...hue.defaults, presets: '0,30,60,120' }));
+  assert.deepEqual(dial.calls, key.calls);
+});
+
+test('the hue nudge buttons step the same amount in both directions', async () => {
+  // The hue wraps rather than clamping, so a button never gets stuck on a bound:
+  // light.js setHsl normalises whatever comes out of the step (see protocol.test.js).
+  const up = L({ hue: 30 });
+  await hueUp.onRun(ctxFor(up, hueUp.defaults));
+  assert.deepEqual(up.calls, [['setHsl', 60, 100, 100]]);
+
+  const down = L({ hue: 30 });
+  await hueDown.onRun(ctxFor(down, hueDown.defaults));
+  assert.deepEqual(down.calls, [['setHsl', 0, 100, 100]]);
+
+  // Off the top of the wheel: the raw value leaves, setHsl wraps it to 0.
+  const over = L({ hue: 350 });
+  await hueUp.onRun(ctxFor(over, hueUp.defaults));
+  assert.deepEqual(over.calls, [['setHsl', 380, 100, 100]]);
+
+  // A junk step must fall back to the default rather than freezing the key.
+  const junk = L({ hue: 0 });
+  await hueUp.onRun(ctxFor(junk, { ...hueUp.defaults, step: 'nonsense' }));
+  assert.deepEqual(junk.calls, [['setHsl', 30, 100, 100]]);
 });
 
 test('saturation dial calls setSaturation, not setHsl', async () => {

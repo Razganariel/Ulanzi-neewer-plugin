@@ -8,6 +8,9 @@ import * as brightness from './brightness.js';
 import * as brightnessUp from './brightness-up.js';
 import * as brightnessDown from './brightness-down.js';
 import * as hue from './hue.js';
+import * as huePresets from './hue-presets.js';
+import * as hueUp from './hue-up.js';
+import * as hueDown from './hue-down.js';
 import * as saturation from './saturation.js';
 import * as saturationUp from './saturation-up.js';
 import * as saturationDown from './saturation-down.js';
@@ -23,6 +26,9 @@ const MODULES = [
   brightnessUp,
   brightnessDown,
   hue,
+  huePresets,
+  hueUp,
+  hueDown,
   saturation,
   saturationUp,
   saturationDown,

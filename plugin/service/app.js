@@ -36,11 +36,11 @@ const log = (msg, level = 'info') => {
 /**
  * Encoder readout must only go to instances the host actually placed on a dial.
  *
- * The manifest cannot answer that: brightness/hue/saturation/cct/scan all list
- * both "Keypad" and "Encoder" in Controllers, so an action-level flag was true
- * for every instance. The result was setFeedbackLayout/setFeedback fired on plain
- * buttons, where the host accepts them (code 0) and they blank the key instead of
- * filling it.
+ * The manifest cannot answer that on its own: it lists one controller per action,
+ * so an action-level flag was true for every instance of a dial action no matter
+ * where it actually sits. The result was setFeedbackLayout/setFeedback fired on
+ * plain buttons, where the host accepts them (code 0) and they blank the key
+ * instead of filling it.
  *
  * The host does send `controller` on add, so that is the source of truth. The
  * manifest is only a fallback for events that carry no controller field.
@@ -342,7 +342,7 @@ $UD.onDidReceiveSettings((message) => {
   forgetActionId(contexts, decodeContext(context).actionid, context);
   entry.settings = { ...entry.action.defaults, ...(message.settings || {}) };
   $UD.sendParamFromPlugin(entry.settings, context);
-  refresh(context); refresh(context);
+  refresh(context);
 });
 
 $UD.onParamFromApp((message) => {

@@ -1,13 +1,13 @@
 /**
- * Hue action - one dial of its own, and the button runs the same presets.
+ * Hue action - the dial, and the dial alone.
  *
  * Turning walks the hue by a fixed step (10 degrees by default, measured as what
- * the D200X feels right at); a press jumps to the next preset in the list.
- * Presets are also reachable from dedicated keys, which call the same
- * `applyPreset` helper rather than duplicating the frame logic.
+ * the D200X feels right at). The button side of the hue lives in
+ * `hue-presets.js` (walk the preset list), `hue-up.js` and `hue-down.js` (nudge
+ * by a fixed step), which is what one key press used to have to choose between.
  *
- * A dial press and a key press are different host events (see the onDialUp wiring
- * in app.js), so both call `cyclePreset` rather than one calling the other.
+ * Pressing the dial is its own host event (see the onDialUp wiring in app.js), so
+ * it walks the presets directly rather than relying on a key press.
  */
 
 import { ACTION, LIMITS, STATE } from '../core/constants.js';
@@ -30,10 +30,10 @@ export function render({ $UD, context, snap, isEncoder }) {
   const value = `${snap.hue}`;
   if (isEncoder) setEncoderText($UD, context, value, 'HUE');
   setStateIcon($UD, context, STATE.DEFAULT, value);
-  setTitle($UD, context, `Hue `);
+  setTitle($UD, context, `hue ${value}`);
 }
 
-/** Jump to one preset; shared with the dedicated preset keys. */
+/** Sets the hue to one value, leaving saturation and brightness alone. */
 export async function applyPreset(ctx, hue) {
   const { light, report } = ctx;
   try {
@@ -56,24 +56,25 @@ export async function onDialRotate(ctx, message) {
 }
 
 /** Next preset after the current hue, or null when the list is empty. */
-export function nextHuePreset(ctx) {
+export function nextHuePreset(ctx, presets) {
   const { settings, snap } = ctx;
-  const presets = parseList(settings.presets ?? defaults.presets).map((hue) => clamp(hue, 0, MAX, 0));
-  return nextPreset(presets, snap.hue);
+  const list = parseList(presets ?? settings.presets ?? defaults.presets)
+    .map((hue) => clamp(hue, 0, MAX, null))
+    .filter((hue) => hue !== null);
+  return nextPreset(list, snap.hue);
 }
 
-export async function onRun(ctx) {
-  const { light, report } = ctx;
-  const next = nextHuePreset(ctx);
+/**
+ * Walks the preset list by one, wrapping at the end. Shared by
+ * `hue-presets.js` and this module's own dial press, so the two never drift.
+ */
+export async function applyNextHuePreset(ctx, presets) {
+  const next = nextHuePreset(ctx, presets);
   if (next === null) return;
-  try {
-    await light.setHsl(next);
-  } catch (err) {
-    report(err);
-  }
+  await applyPreset(ctx, next);
 }
 
-/** Pressing the dial runs the same preset list as the button. */
+/** Pressing the dial walks the same preset list as the dedicated Hue Presets key. */
 export async function onDialPress(ctx) {
-  await onRun(ctx);
+  await applyNextHuePreset(ctx);
 }

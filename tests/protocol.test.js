@@ -79,6 +79,14 @@ test('360 degrees is normalised to 0', () => {
   assert.equal(hslFrame(360, 100, 100)[4], 0);
 });
 
+test('a hue step that runs off the wheel comes back round', () => {
+  // The hue nudge buttons hand setHsl whatever their step produced, so a press
+  // near either end has to land back inside the range rather than being rejected.
+  assert.equal(normalizeHue(380), 0);
+  assert.equal(normalizeHue(350 + 30), 0);
+  assert.equal(normalizeHue(10 - 30), 0);
+});
+
 test('every generated frame passes its own checksum', () => {
   for (const frame of [powerFrame(true), powerFrame(false), hslFrame(123, 45, 67), cctFrame(4300, 80)]) {
     assert.ok(isValidFrame(frame), `invalid frame ${hex(frame)}`);

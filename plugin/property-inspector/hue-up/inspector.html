@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neewer Hue Up</title>
+    <link rel="stylesheet" href="../../libs/css/uspi.css" />
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body data-actionid="com.ulanzi.ulanzistudio.neewer.hue-up">
+    <div class="uspi-wrapper">
+    <form id="property-inspector">
+    <h1>Neewer Hue Up</h1>
+    <p class="sub">Every press advances the hue one step.</p>
+
+      <section>
+        <h2>Device</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Controlled light</span>
+          <select class="uspi-item-value" name="device" id="device"></select>
+        </label>
+        <p class="hint" id="device-hint">Add and name lights from the Neewer Scan action.</p>
+      </section>
+
+      <section>
+        <h2>Press</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Step (degrees)</span>
+          <select class="uspi-item-value" name="step">
+            <option value="5">5°</option>
+            <option value="10">10°</option>
+            <option value="15">15°</option>
+            <option value="30">30°</option>
+            <option value="45">45°</option>
+            <option value="60">60°</option>
+            <option value="90">90°</option>
+            <option value="120">120°</option>
+          </select>
+        </label>
+        <p class="hint">
+          The wire carries the hue as two bytes, so any step is exact. The hue wraps
+          at 360°, the light keeps its current saturation and brightness, and the Hue
+          action on a dial sweeps instead.
+        </p>
+      </section>
+
+      <section>
+        <h2>Light</h2>
+        <div class="status" id="link"><span class="dot"></span><span class="label">connecting...</span></div>
+        <p class="hint mono" id="detail">no device configured</p>
+        <p class="error" id="error" style="display: none"></p>
+      </section>
+
+    </form>
+    </div>
+
+    <script src="../../libs/js/constants.js"></script>
+    <script src="../../libs/js/eventEmitter.js"></script>
+    <script src="../../libs/js/timers.js"></script>
+    <script src="../../libs/js/utils.js"></script>
+    <script src="../../libs/js/ulanziApi.js"></script>
+    <script src="../shared.js"></script>
+    <script src="../stepper.js"></script>
+    <script src="inspector.js"></script>
+  </body>
+</html>

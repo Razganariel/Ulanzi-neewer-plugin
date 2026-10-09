@@ -7,10 +7,10 @@
  *  - `DisableAutomaticStates: true` made the host draw nothing, and index 0 of
  *    every action was the "fixture unreachable" icon, so a dropped key showed a
  *    grey cross rather than the action.
- *  - the encoder readout was decided from the manifest, where brightness/hue/
- *    saturation/cct/scan all list both Keypad and Encoder. Every instance was
- *    therefore treated as a dial, and setFeedbackLayout/setFeedback were fired on
- *    plain buttons, where the host accepts them and blanks the key.
+ *  - the encoder readout was decided from the manifest, where the dial actions
+ *    used to list both Keypad and Encoder. Every instance was therefore treated as
+ *    a dial, and setFeedbackLayout/setFeedback were fired on plain buttons, where
+ *    the host accepts them and blanks the key.
  *
  * Keys also used to carry a "waiting for connection" state. The host mounts a key
  * after announcing it, so the frame that corrected the icon arrived too early and
@@ -29,6 +29,9 @@ import * as brightness from '../plugin/service/actions/brightness.js';
 import * as brightnessUp from '../plugin/service/actions/brightness-up.js';
 import * as brightnessDown from '../plugin/service/actions/brightness-down.js';
 import * as hue from '../plugin/service/actions/hue.js';
+import * as huePresets from '../plugin/service/actions/hue-presets.js';
+import * as hueUp from '../plugin/service/actions/hue-up.js';
+import * as hueDown from '../plugin/service/actions/hue-down.js';
 import * as saturation from '../plugin/service/actions/saturation.js';
 import * as saturationUp from '../plugin/service/actions/saturation-up.js';
 import * as saturationDown from '../plugin/service/actions/saturation-down.js';
@@ -178,6 +181,46 @@ test('brightness and saturation split into a dial and two one-step buttons', () 
     assert.equal(typeof button.onRun, 'function', `${button.uuid} answers a press`);
     assert.equal(button.onDialRotate, undefined, `${button.uuid} has no sweep`);
     assert.ok(button.defaults.step > 0, `${button.uuid} has a usable default step`);
+  }
+});
+
+test('hue splits its tap into a preset walk and two one-step buttons', () => {
+  // Same shape as the CCT split: the dial keeps the sweep, and each button does
+  // exactly one of the two things a tap used to have to choose between.
+  const declared = actionOf(hue.uuid);
+  assert.deepEqual(declared.Controllers, ['Encoder'], 'the hue dial sweeps');
+  assert.equal(hue.onRun, undefined, 'an Encoder-only action never gets a key press');
+  assert.equal(typeof hue.onDialRotate, 'function', 'the hue dial still sweeps');
+  assert.equal(typeof hue.onDialPress, 'function', 'the dial press walks the presets');
+
+  assert.deepEqual(actionOf(huePresets.uuid).Controllers, ['Keypad']);
+  assert.equal(typeof huePresets.onRun, 'function', 'presets answer a press');
+  assert.equal(huePresets.onDialRotate, undefined);
+  assert.ok(huePresets.defaults.presets, 'presets carry a default list');
+
+  for (const step of [hueUp, hueDown]) {
+    const declaredStep = actionOf(step.uuid);
+    assert.deepEqual(declaredStep.Controllers, ['Keypad'], `${step.uuid} is a button only`);
+    assert.equal(declaredStep.Encoder, undefined, `${step.uuid} declares no dial layout`);
+    assert.equal(typeof step.onRun, 'function', `${step.uuid} answers a press`);
+    assert.equal(step.onDialRotate, undefined, `${step.uuid} has no sweep`);
+    assert.ok(step.defaults.step > 0, `${step.uuid} has a usable default step`);
+  }
+  assert.notEqual(hueUp.uuid, hueDown.uuid, 'up and down are two distinct actions');
+});
+
+test('every hue key draws the value it is about to move', () => {
+  for (const mod of [huePresets, hueUp, hueDown]) {
+    const sent = draw(mod, { snap: { hue: 120 } });
+    assert.ok(sent.some((c) => c[0] === 'state'), `${mod.uuid} paints its key`);
+    assert.ok(
+      sent.some((c) => c[0] === 'title' && /120/.test(String(c[1]))),
+      `${mod.uuid} names the value on the key, not a fixed label`
+    );
+    assert.ok(
+      !sent.some((c) => c[0] === 'layout' || c[0] === 'feedback'),
+      `${mod.uuid} is a button and must not send encoder commands`
+    );
   }
 });
 
