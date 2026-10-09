@@ -11,6 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import * as hue from '../plugin/service/actions/hue.js';
 
 const SOURCE = readFileSync(new URL('../plugin/property-inspector/presets.js', import.meta.url), 'utf8');
 
@@ -112,14 +113,16 @@ function miniDom() {
 }
 
 const COLOUR = {
-  value: { label: 'Hue', unit: '°', min: 0, max: 359 },
+  value: { label: 'Hue', name: 'Colour', unit: '°', min: 0, max: 359 },
   third: { label: 'Saturation', unit: '%', min: 0, max: 100 },
-  title: 'saturation',
 };
 const SCENE = {
-  value: { label: 'Temperature', unit: 'K', min: 2500, max: 8500 },
+  value: { label: 'Temperature', name: 'Scene', unit: 'K', min: 2500, max: 8500 },
   third: { label: 'Brightness', unit: '%', min: 1, max: 100 },
-  title: 'brightness',
+};
+// A preset that is a single value, the shape the brightness and saturation dials use.
+const VALUE_ONLY = {
+  value: { label: 'Brightness', name: 'Value', unit: '%', min: 1, max: 100 },
 };
 
 /** Loads the editor against a fresh DOM and captures what it pushes. */
@@ -198,11 +201,17 @@ test('filling a row and saving writes the string the service reads', () => {
 
 test('an unnamed preset is stored under a generated name', () => {
   // The name list travels positionally, so a blank would slide every later name onto
-  // the wrong preset.
-  const { editor, dom, sent } = mount(COLOUR);
+  // the wrong preset. Each panel picks its own word: a colour is filed as "Colour 2",
+  // a measured scene as "Scene 2".
+  const { editor, sent } = mount(COLOUR);
   editor.render({ presets: '0,120', presetNames: 'Red,' });
   assert.equal(editor.save(), true);
-  assert.equal(sent.at(-1).presetNames, 'Red,Scene 2');
+  assert.equal(sent.at(-1).presetNames, 'Red,Colour 2');
+
+  const scene = mount(SCENE);
+  scene.editor.render({ presets: '3400,4500', presetNames: 'Candle,' });
+  scene.editor.save();
+  assert.equal(scene.sent.at(-1).presetNames, 'Candle,Scene 2');
 });
 
 test('a value out of range is refused and says which preset is wrong', () => {
@@ -322,6 +331,55 @@ test('a value that is not a number at all is refused too', () => {
   type(dom, 0, 'value', 'warm');
   assert.equal(editor.save(), false);
   assert.equal(sent.length, 0);
+});
+
+test('a single value list has no name column and stores no names', () => {
+  // Brightness and saturation presets are a plain column of numbers. Showing a name
+  // column would leave nothing to show, and storing names nobody displays would be a
+  // second copy of the list free to drift.
+  const { editor, dom, sent } = mount(VALUE_ONLY);
+  editor.render({ presets: '25,50,100', presetNames: 'ignored,ignored,ignored' });
+  assert.deepEqual(rowInputs(dom, 0), [{ field: 'value', value: '25' }]);
+
+  type(dom, 1, 'value', '75');
+  assert.equal(editor.save(), true);
+  assert.equal(sent.at(-1).presets, '25,75,100');
+  assert.equal('presetNames' in sent.at(-1), false, 'no names are written');
+});
+
+test('a single value list refuses a value out of range', () => {
+  const { editor, dom, sent } = mount(VALUE_ONLY);
+  editor.render({ presets: '25,50' });
+  type(dom, 0, 'value', '150');
+  assert.equal(editor.save(), false);
+  assert.equal(sent.length, 0);
+  assert.match(dom.registry.get('preset-status').textContent, /between 1 and 100/);
+});
+
+test('a single value list round trips what the service reads', () => {
+  // The panel writes a bare list and the service parses bare numbers, so the two must
+  // agree: an extra colon here would be a preset the service silently drops.
+  const { editor, dom, sent } = mount(VALUE_ONLY);
+  editor.render({ presets: '1,50' });
+  editor.addRow();
+  type(dom, 2, 'value', '100');
+  assert.equal(editor.save(), true);
+  assert.equal(sent.at(-1).presets, '1,50,100');
+  assert.deepEqual(hue.parseHuePresets(sent.at(-1).presets), [
+    { hue: 1, saturation: null },
+    { hue: 50, saturation: null },
+    { hue: 100, saturation: null },
+  ]);
+});
+
+test('adding to a table that is only a blank row does not pile blanks up', () => {
+  // One empty row is enough to type into; a second press reuses it rather than leaving
+  // a row the user has to notice and delete.
+  const { editor, dom } = mount(VALUE_ONLY);
+  editor.render({ presets: '' });
+  editor.addRow();
+  editor.addRow();
+  assert.equal(dom.registry.get('preset-rows').querySelectorAll('tr').length, 1);
 });
 
 test('the row actions are icon buttons that still say what they do', () => {

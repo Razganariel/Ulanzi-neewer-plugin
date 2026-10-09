@@ -11,7 +11,7 @@
  */
 
 import { ACTION, LIMITS, STATE } from '../core/constants.js';
-import { rotateSteps } from '../core/dial.js';
+import { rotateSteps, walkList } from '../core/dial.js';
 import { clamp, dialStep } from '../core/params.js';
 import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
 
@@ -88,20 +88,13 @@ export async function onDialRotate(ctx, message) {
 /**
  * Next preset after the current hue, or null when the list is empty.
  *
- * Stepped by position, like the CCT scenes: a value search would assume the list
- * ascends and would skip any preset the property inspector appended below the current
- * one, leaving it unreachable. Saturation rides along with the entry it belongs to.
- *
- * When the light is not sitting on any preset - the dial moved it - the walk starts at
- * the first one above the current hue, so a press still moves forward.
+ * Stepped by position through the shared dial helper, so a preset the property
+ * inspector appended below the current ones is still reached on every lap.
  */
 export function nextHuePreset(ctx, presets) {
   const { settings, snap } = ctx;
   const list = parseHuePresets(presets ?? settings.presets ?? defaults.presets);
-  if (!list.length) return null;
-  const at = list.findIndex((preset) => preset.hue === snap.hue);
-  if (at >= 0) return list[(at + 1) % list.length];
-  return list.find((preset) => preset.hue > snap.hue) ?? list[0];
+  return walkList(list, snap.hue, (preset) => preset.hue);
 }
 
 /**

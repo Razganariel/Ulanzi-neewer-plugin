@@ -55,23 +55,47 @@
 
       <section>
         <h2>Presets</h2>
-        <label class="uspi-item">
-          <span class="uspi-item-label">Scenes (kelvin:brightness)</span>
-          <input type="text" name="presets" placeholder="3400:28,4500:16,5000:16,5600:28,6500:100" />
-        </label>
         <p class="hint">
-          One entry per scene, separated by commas. Each carries its own brightness,
-          because a scene read with a colour meter is not just a temperature: a
-          candle sits around 28% while a cold blue needs the full 100%.
+          Fill a row and press Save. Nothing is written until you do. Delete removes a
+          scene at once. These are the scenes a dial press walks; the CCT Presets key
+          keeps its own list.
         </p>
-        <label class="uspi-item">
-          <span class="uspi-item-label">Scene names</span>
-          <input type="text" name="presetNames" placeholder="Candle,Sunset,Afternoon light,Sunlight,Cold blue light" />
-        </label>
-        <table class="mono" id="preset-table">
-          <thead><tr><th>#</th><th>Scene</th><th>Temperature</th><th>Brightness</th></tr></thead>
-          <tbody></tbody>
+        <div class="presets-scroll">
+        <table class="presets">
+          <colgroup>
+            <col class="c-num" />
+            <col />
+            <col class="c-value" />
+            <col class="c-third" />
+            <col class="c-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Temp (K)</th>
+              <th>Lum (%)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="preset-rows"></tbody>
         </table>
+        </div>
+        <p class="error" id="preset-status" style="display: none"></p>
+        <div class="row" style="margin-top: 10px">
+          <button type="button" class="ghost" id="preset-add">Add a scene</button>
+        </div>
+        <p class="hint">
+          Each scene carries its own brightness, because a scene read with a colour
+          meter is not just a temperature: a candle sits around 28% while a cold blue
+          needs the full 100%. Leave the brightness empty to keep whatever the dial
+          last set.
+        </p>
+        <p class="hint">
+          A scene outside the minimum and maximum set above is pulled to the nearer
+          bound when the press applies it, so a scene can be listed without ever
+          appearing. Keep the range wide enough for the list.
+        </p>
       </section>
 
       <section>
@@ -90,6 +114,7 @@
     <script src="../../libs/js/utils.js"></script>
     <script src="../../libs/js/ulanziApi.js"></script>
     <script src="../shared.js"></script>
+    <script src="../presets.js"></script>
     <script src="inspector.js"></script>
   </body>
 </html>

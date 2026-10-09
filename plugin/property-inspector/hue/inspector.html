@@ -40,11 +40,37 @@
 
       <section>
         <h2>Presets</h2>
-        <label class="uspi-item">
-          <span class="uspi-item-label">Hue presets (degrees)</span>
-          <input type="text" name="presets" placeholder="0,30,60,120,180,240,300" />
-        </label>
-        <p class="hint">A tap jumps to the next preset in this list and wraps at the end.</p>
+        <p class="hint">
+          Fill a row and press Save. Nothing is written until you do. Delete removes a
+          colour at once. These are the presets a dial press walks; the Hue Presets key
+          keeps its own list.
+        </p>
+        <div class="presets-scroll">
+        <table class="presets">
+          <colgroup>
+            <col class="c-num" />
+            <col />
+            <col class="c-value" />
+            <col class="c-third" />
+            <col class="c-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Teinte (°)</th>
+              <th>Sat (%)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="preset-rows"></tbody>
+        </table>
+        </div>
+        <p class="error" id="preset-status" style="display: none"></p>
+        <div class="row" style="margin-top: 10px">
+          <button type="button" class="ghost" id="preset-add">Add a colour</button>
+        </div>
+        <p class="hint">A saturation left empty keeps whatever the dial last set.</p>
       </section>
 
       <section>
@@ -63,6 +89,7 @@
     <script src="../../libs/js/utils.js"></script>
     <script src="../../libs/js/ulanziApi.js"></script>
     <script src="../shared.js"></script>
+    <script src="../presets.js"></script>
     <script src="inspector.js"></script>
   </body>
 </html>

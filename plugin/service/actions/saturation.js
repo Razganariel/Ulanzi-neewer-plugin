@@ -16,8 +16,8 @@
  */
 
 import { ACTION, LIMITS, STATE } from '../core/constants.js';
-import { rotateSteps } from '../core/dial.js';
-import { clamp, dialStep, nextPreset, parseList } from '../core/params.js';
+import { rotateSteps, walkList } from '../core/dial.js';
+import { clamp, dialStep, parseList } from '../core/params.js';
 import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.SATURATION;
@@ -53,13 +53,13 @@ export async function onDialRotate(ctx, message) {
   }
 }
 
-/** Pressing the dial jumps to the next preset, wrapping at the end. */
+/** Pressing the dial steps to the next preset, wrapping at the end. */
 export async function onDialPress(ctx) {
   const { settings, light, snap, report } = ctx;
   const min = clamp(settings.min, LIMITS.SATURATION_MIN, LIMITS.SATURATION_MAX, defaults.min);
   const max = clamp(settings.max, min, LIMITS.SATURATION_MAX, defaults.max);
   const presets = parseList(settings.presets ?? defaults.presets).map((v) => clamp(v, min, max, min));
-  const next = nextPreset(presets, snap.saturation);
+  const next = walkList(presets, snap.saturation, (v) => v);
   if (next === null) return;
   try {
     await light.setSaturation(next);

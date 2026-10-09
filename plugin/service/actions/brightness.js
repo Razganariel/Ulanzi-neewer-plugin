@@ -11,8 +11,8 @@
  */
 
 import { ACTION, LIMITS, STATE } from '../core/constants.js';
-import { rotateSteps } from '../core/dial.js';
-import { bool, clamp, dialStep, nextPreset, parseList, wrap } from '../core/params.js';
+import { rotateSteps, walkList } from '../core/dial.js';
+import { bool, clamp, dialStep, parseList, wrap } from '../core/params.js';
 import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.BRIGHTNESS;
@@ -53,12 +53,12 @@ export async function onDialRotate(ctx, message) {
   }
 }
 
-/** Pressing the dial jumps to the next preset, wrapping at the end. */
+/** Pressing the dial steps to the next preset, wrapping at the end. */
 export async function onDialPress(ctx) {
   const { settings, light, snap, report } = ctx;
   const { min, max } = bounds(settings);
   const presets = parseList(settings.presets ?? defaults.presets).map((v) => clamp(v, min, max, min));
-  const next = nextPreset(presets, snap.brightness);
+  const next = walkList(presets, snap.brightness, (v) => v);
   if (next === null) return;
   try {
     await light.setBrightness(next);

@@ -1,10 +1,16 @@
 /**
- * Row editor for the preset lists, shared by the Hue Presets and CCT Presets panels.
+ * Row editor for the preset lists.
+ *
+ * Used by every action that walks a preset list on a press: the CCT Presets and Hue
+ * Presets keys, and the Brightness, Saturation and Hue dials. A list is either a plain
+ * column of values (brightness, saturation) or a row per colour/scene carrying a name
+ * and a third value, so the editor takes the extra columns as optional and the panel
+ * supplies the column headings in its own markup.
  *
  * The service reads `presets` as one flat string: "kelvin:brightness" for a scene,
- * "hue:saturation" for a colour. The rows on screen are a view over that string,
- * not a second copy of it: every save rewrites the whole string from the rows, so
- * the two can never drift apart.
+ * "hue:saturation" for a colour, or bare numbers when a preset is a single value. The
+ * rows on screen are a view over that string, not a second copy of it: every save
+ * rewrites the whole string from the rows, so the two can never drift apart.
  *
  * Saving is explicit, one button per row plus one to add. That is not a detail: the
  * panel rebuilds its rows whenever the settings arrive, and rebuilding while a cell
@@ -17,7 +23,6 @@
  */
 
 (function () {
-  const BLANK = { name: '', value: '', third: '' };
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
   // Floppy disk and bin. Inline rather than a file so the panel cannot fail to load
@@ -51,16 +56,22 @@
 
   /**
    * @param {object} spec
-   * @param {{label:string, unit:string, min:number, max:number}} spec.value
-   *        the axis the presets are ordered by
-   * @param {{label:string, unit:string, min:number, max:number}} spec.third
-   *        the axis a preset carries alongside it; empty means "keep current"
-   * @param {string} [spec.title]  column heading for the third axis
+   * @param {{label:string, name?:string, unit:string, min:number, max:number}} spec.value
+   *        the axis the presets are ordered by. `name` is the word a row without a
+   *        name is filed under, as in "Scene 3"
+   * @param {{label:string, unit:string, min:number, max:number}} [spec.third]
+   *        the axis a preset carries alongside it; empty means "keep current".
+   *        Omitted when a preset is a single value, which drops the column entirely
+   *        rather than showing an empty one.
+   * @param {boolean} [spec.names]  one name per row. Defaults to true whenever there
+   *        is a third axis, since a named colour or scene is the point of the row.
    */
   window.presetEditor = function createPresetEditor(spec) {
     const body = document.getElementById('preset-rows');
     const status = document.getElementById('preset-status');
     const addButton = document.getElementById('preset-add');
+    const hasThird = Boolean(spec.third);
+    const hasNames = spec.names ?? hasThird;
     /** What this panel last sent, so the host echo does not rebuild the rows. */
     let emitted = null;
 
@@ -78,12 +89,13 @@
       number.dataset.index = String(index);
       tr.appendChild(number);
 
-      for (const field of ['name', 'value', 'third']) {
+      for (const field of hasNames ? ['name', 'value', 'third'] : ['value']) {
+        if (field === 'third' && !hasThird) continue;
         const td = cell('td');
         const input = document.createElement('input');
         input.type = 'text';
         input.name = `p${index}_${field}`;
-        input.value = entry[field];
+        input.value = entry[field] ?? '';
         input.dataset.field = field;
         td.appendChild(input);
         tr.appendChild(td);
@@ -131,10 +143,16 @@
       });
     }
 
+    const blankRow = () => ({
+      name: '',
+      value: '',
+      third: '',
+    });
+
     function draw(entries) {
       body.textContent = '';
       entries.forEach((entry, index) => body.appendChild(row(index, entry)));
-      if (!entries.length) body.appendChild(row(0, BLANK));
+      if (!entries.length) body.appendChild(row(0, blankRow()));
       renumber();
     }
 
@@ -144,7 +162,7 @@
       // Drop a trailing blank row first: one empty row is enough to type into.
       const last = list[list.length - 1];
       if (last && isBlank(readRow(last))) list[list.length - 1].remove();
-      body.appendChild(row(rows().length, BLANK));
+      body.appendChild(row(rows().length, blankRow()));
       renumber();
       clearStatus();
       const inputs = rows()[rows().length - 1].querySelectorAll('input');
@@ -161,7 +179,7 @@
     }
 
     function readRow(tr) {
-      const out = { ...BLANK };
+      const out = blankRow();
       for (const input of tr.querySelectorAll('input')) {
         out[input.dataset.field] = input.value.trim();
       }
@@ -202,7 +220,7 @@
         if (isBlank(entry)) continue;
         for (const input of tr.querySelectorAll('input')) input.className = '';
         const problems = [];
-        if (entry.name.includes(',')) {
+        if (hasNames && entry.name.includes(',')) {
           // Names travel in a comma separated list, so a comma inside one would split
           // it into two names and shift every name after it.
           problems.push('a name cannot contain a comma');
@@ -210,8 +228,8 @@
         if (numberOrNull(entry.value, spec.value.min, spec.value.max) === null) {
           problems.push(`a value must be a number between ${spec.value.min} and ${spec.value.max}`);
         }
-        if (entry.third !== '' && numberOrNull(entry.third, spec.third.min, spec.third.max) === null) {
-          problems.push(`the ${spec.title || spec.third.label} must be empty or a number between ${spec.third.min} and ${spec.third.max}`);
+        if (hasThird && entry.third !== '' && numberOrNull(entry.third, spec.third.min, spec.third.max) === null) {
+          problems.push(`the ${spec.third.label} must be empty or a number between ${spec.third.min} and ${spec.third.max}`);
         }
         if (problems.length) {
           fail(`${label(tr)}: ${problems.join('; ')}`, tr);
@@ -224,15 +242,20 @@
       const names = [];
       entries.forEach((entry, index) => {
         const value = numberOrNull(entry.value, spec.value.min, spec.value.max);
-        const third = entry.third === '' ? null : numberOrNull(entry.third, spec.third.min, spec.third.max);
+        const third = !hasThird || entry.third === ''
+          ? null
+          : numberOrNull(entry.third, spec.third.min, spec.third.max);
         packed.push(third === null ? `${value}` : `${value}:${third}`);
-        names.push(entry.name || `Scene ${index + 1}`);
+        names.push(entry.name || `${spec.value.name || 'Scene'} ${index + 1}`);
       });
       const presets = packed.join(',');
       // Recorded before sending: the echo that follows must not rebuild the rows.
       emitted = presets;
       clearStatus();
-      PI.push({ ...withoutRowFields(PI.read()), presets, presetNames: names.join(',') });
+      const settings = { ...withoutRowFields(PI.read()), presets };
+      // A single value list has nowhere to show a name, so it does not get one stored.
+      if (hasNames) settings.presetNames = names.join(',');
+      PI.push(settings);
       return true;
     }
 
@@ -265,7 +288,7 @@
         if (!trimmed) continue;
         const [value, third] = trimmed.split(':');
         entries.push({
-          name: names[entries.length] || '',
+          name: hasNames ? names[entries.length] || '' : '',
           value: value.trim(),
           // A bare entry means "keep the current value", and shows as an empty cell.
           third: third === undefined ? '' : third.trim(),

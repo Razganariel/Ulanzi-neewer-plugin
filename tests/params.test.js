@@ -9,7 +9,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bool, clamp, dialStep, nextPreset, parseList, wrap } from '../plugin/service/core/params.js';
+import { bool, clamp, dialStep, parseList, wrap } from '../plugin/service/core/params.js';
 
 test('clamp keeps integers inside range and falls back when unusable', () => {
   assert.equal(clamp(50, 0, 100, 10), 50);
@@ -42,15 +42,6 @@ test('parseList reads numbers, drops junk and de-duplicates', () => {
   assert.deepEqual(parseList(''), []);
   assert.deepEqual(parseList(null), []);
   assert.deepEqual(parseList('abc,def'), []);
-});
-
-test('nextPreset advances and wraps', () => {
-  assert.equal(nextPreset([0, 60, 120], 0), 60);
-  assert.equal(nextPreset([0, 60, 120], 60), 120);
-  assert.equal(nextPreset([0, 60, 120], 120), 0, 'wraps past the last');
-  assert.equal(nextPreset([0, 60], 999), 0, 'a full sweep always moves');
-  assert.equal(nextPreset([], 0), null, 'no presets means no-op');
-  assert.equal(nextPreset([42], 0), 42, 'a lone preset stays on itself');
 });
 
 test('bool reads the string forms the host stores', () => {

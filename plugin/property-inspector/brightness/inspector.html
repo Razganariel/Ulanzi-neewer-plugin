@@ -49,11 +49,32 @@
 
       <section>
         <h2>On dial press</h2>
-        <label class="uspi-item">
-          <span class="uspi-item-label">Presets (%)</span>
-          <input type="text" name="presets" placeholder="25,50,75,100" />
-        </label>
-        <p class="hint">Pressing the dial jumps to the next value here and wraps at the end.</p>
+        <p class="hint">
+          Fill a row and press Save. Nothing is written until you do. Delete removes a
+          value at once.
+        </p>
+        <div class="presets-scroll">
+        <table class="presets">
+          <colgroup>
+            <col class="c-num" />
+            <col />
+            <col class="c-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Brightness (%)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="preset-rows"></tbody>
+        </table>
+        </div>
+        <p class="error" id="preset-status" style="display: none"></p>
+        <div class="row" style="margin-top: 10px">
+          <button type="button" class="ghost" id="preset-add">Add a value</button>
+        </div>
+        <p class="hint">Pressing the dial steps to the next value here and wraps at the end.</p>
       </section>
 
       <section>
@@ -72,6 +93,7 @@
     <script src="../../libs/js/utils.js"></script>
     <script src="../../libs/js/ulanziApi.js"></script>
     <script src="../shared.js"></script>
+    <script src="../presets.js"></script>
     <script src="inspector.js"></script>
   </body>
 </html>

@@ -49,14 +49,11 @@ export function parseList(raw) {
 }
 
 /**
- * Next preset strictly after `current`, wrapping at the end. Stepping to the
- * first preset when every preset is already below `current` keeps a full sweep
- * always moving instead of sticking on the last one.
+ * The preset walk used to live here, as `nextPreset`, searching for the first value
+ * above the current one. It is now `walkList` in core/dial.js, beside the rotation
+ * decoder it belongs with: it is a dial concern, and a value search could not reach a
+ * preset the user had entered out of order.
  */
-export function nextPreset(presets, current) {
-  if (!presets.length) return null;
-  return presets.find((value) => value > current) ?? presets[0];
-}
 
 /** Boolean read from a setting the host may have stored as "false" or false. */
 export function bool(value, fallback) {

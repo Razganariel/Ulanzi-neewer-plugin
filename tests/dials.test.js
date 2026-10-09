@@ -11,6 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DEFAULTS } from '../plugin/service/core/constants.js';
+import { rotateSteps, walkList } from '../plugin/service/core/dial.js';
 import * as hue from '../plugin/service/actions/hue.js';
 import * as huePresets from '../plugin/service/actions/hue-presets.js';
 import * as hueUp from '../plugin/service/actions/hue-up.js';
@@ -120,6 +121,85 @@ test('a scene added below the others still comes up', async () => {
   );
 });
 
+test('the preset walk is stepped by position, not by value', () => {
+  // The concept shared by every dial: one step along the list from the entry in use,
+  // wrapping at the end. A value search would skip anything the user entered out of
+  // order, which is what the property inspector produces when a low preset is added
+  // to a list of higher ones.
+  const list = [50, 25, 75, 100];
+  const walk = [];
+  let current = 50;
+  for (let i = 0; i < list.length; i += 1) {
+    current = walkList(list, current, (v) => v);
+    walk.push(current);
+  }
+  assert.deepEqual(walk, [25, 75, 100, 50], 'every entry is reached once per lap');
+});
+
+test('the walk reaches an entry appended below the others, on every dial', async () => {
+  // One shared helper, so one regression test covers brightness, saturation, CCT and
+  // Hue. Each list has its out-of-order entry last, exactly as the inspector appends.
+  const cases = [
+    {
+      name: 'brightness',
+      run: (light, settings) => brightness.onDialPress(ctxFor(light, settings)),
+      settings: { ...brightness.defaults, presets: '75,100,25' },
+      snap: { brightness: 100 },
+      read: (calls) => calls[0][1],
+      expected: [25, 75, 100],
+    },
+    {
+      name: 'saturation',
+      run: (light, settings) => saturation.onDialPress(ctxFor(light, settings)),
+      settings: { ...saturation.defaults, presets: '75,100,25' },
+      snap: { saturation: 100 },
+      read: (calls) => calls[0][1],
+      expected: [25, 75, 100],
+    },
+  ];
+  for (const c of cases) {
+    let value = c.snap[Object.keys(c.snap)[0]];
+    const walk = [];
+    for (let i = 0; i < c.expected.length; i += 1) {
+      const light = L({ ...c.snap, [Object.keys(c.snap)[0]]: value });
+      await c.run(light, c.settings);
+      value = c.read(light.calls);
+      walk.push(value);
+    }
+    assert.deepEqual(walk, c.expected, `${c.name} reaches the entry it appended last`);
+  }
+});
+
+test('rotation is untouched by the preset walk', async () => {
+  // The walk only ever runs on a press. A rotation must keep behaving exactly as it
+  // did: a signed step off the current value, wrapped at the bounds by default and
+  // clamped when the user asked for that instead.
+  const up = L({ hue: 350, saturation: 100, brightness: 100 });
+  await hue.onDialRotate(ctxFor(up, hue.defaults), RIGHT);
+  assert.deepEqual(up.calls, [['setHsl', 360, 100, 100]], 'raw value, normalised inside the protocol');
+
+  const wrapped = L({ brightness: 2 });
+  await brightness.onDialRotate(ctxFor(wrapped, brightness.defaults), LEFT);
+  assert.deepEqual(wrapped.calls, [['setBrightness', 97]], 'wrap is the default, so 2 - 5 comes back round');
+
+  const clamped = L({ brightness: 2 });
+  await brightness.onDialRotate(ctxFor(clamped, { ...brightness.defaults, wrap: false }), LEFT);
+  assert.deepEqual(clamped.calls, [['setBrightness', 1]], 'clamped when wrap is turned off');
+
+  const ignored = L({ hue: 0 });
+  await hue.onDialRotate(ctxFor(ignored, hue.defaults), { rotateEvent: 'none' });
+  assert.equal(ignored.calls.length, 0, 'an event that is not a rotation moves nothing');
+});
+
+test('rotateSteps is still the only decoder, holds included', () => {
+  assert.equal(rotateSteps({ rotateEvent: 'left' }), -1);
+  assert.equal(rotateSteps({ rotateEvent: 'hold-left' }), -1);
+  assert.equal(rotateSteps({ rotateEvent: 'right' }), 1);
+  assert.equal(rotateSteps({ rotateEvent: 'hold-right' }), 1);
+  assert.equal(rotateSteps({ rotateEvent: 'none' }), 0);
+  assert.equal(rotateSteps(undefined), 0);
+});
+
 test('a hue preset added below the others still comes up', async () => {
   const settings = { ...huePresets.defaults, presets: '0:100,120:100,240:100,45:100' };
   const walk = [];
@@ -131,13 +211,17 @@ test('a hue preset added below the others still comes up', async () => {
   assert.deepEqual(walk, [240, 45, 0, 120]);
 });
 
-test('a light sitting between two presets still moves forward', () => {
-  // Nothing to step from when the dial moved the light off a preset, so the walk
-  // starts at the first preset above it rather than backwards.
-  const between = cct.parseScenes('3400,4500,6500', 2500, 8500);
-  assert.equal(cct.nextScene(between, 4000).kelvin, 4500);
-  assert.equal(cct.nextScene(between, 9000).kelvin, 3400, 'past the last one, start over');
-  assert.equal(cct.nextScene(between, 4500).kelvin, 6500);
+test('a light sitting between two presets still moves forward', async () => {
+  // Nothing to step from when the dial swept the light off a preset, so the walk
+  // starts at the first preset above it rather than going backwards.
+  const settings = { ...cctPresets.defaults, presets: '3400,4500,6500' };
+  const between = L({ mode: 'cct', cct: 4000 });
+  await cctPresets.onRun(ctxFor(between, settings));
+  assert.deepEqual(between.calls, [['setCct', 4500, 100]]);
+
+  const past = L({ mode: 'cct', cct: 9000 });
+  await cctPresets.onRun(ctxFor(past, settings));
+  assert.deepEqual(past.calls, [['setCct', 3400, 100]], 'past the last one, start over');
 });
 
 test('the Hue Presets key walks the list the dial press does', async () => {

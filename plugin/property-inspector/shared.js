@@ -68,11 +68,15 @@
       return repack ? repack(raw) : raw;
     };
 
-    // Panels that save explicitly opt out: a preset list is rebuilt from the settings
-    // it receives, so saving on every keystroke would move the caret out from under
-    // whoever is typing.
+    // Panels that are nothing but a preset list opt out of automatic saving wholly.
+    // The others keep saving as they are edited, with one exception: the preset table
+    // is saved by its own buttons, and writing a half typed row on every blur is
+    // exactly what those buttons exist to prevent.
     if (options.autoSave !== false) {
-      form.addEventListener('change', () => sendParams(collect()));
+      form.addEventListener('change', (event) => {
+        if (inPresetTable(event.target)) return;
+        sendParams(collect());
+      });
     }
 
     const applySettings = (settings) => {
@@ -112,6 +116,20 @@
     });
 
     return { form, sendParams };
+  }
+
+  /**
+   * Whether a change came from the preset table rather than from a setting of the
+   * panel itself.
+   *
+   * The dial panels hold both: their range and step fields save as they are edited,
+   * while the preset rows only ever save when their own button is pressed.
+   */
+  function inPresetTable(node) {
+    for (let el = node; el && el !== document.body; el = el.parentElement) {
+      if (el.classList && el.classList.contains('presets')) return true;
+    }
+    return false;
   }
 
   window.PI = {
