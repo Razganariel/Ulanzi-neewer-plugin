@@ -15,6 +15,7 @@ import { DeviceRegistry } from './core/devices.js';
 import { findByUuid } from './actions/index.js';
 import { decodeContext, ensureEntry, forget, forgetActionId } from './core/context.js';
 import { buildSettings, emptySettings } from './core/settings.js';
+import { installShutdownHandlers } from './core/shutdown.js';
 
 const $UD = new UlanziApi();
 
