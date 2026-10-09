@@ -1,0 +1,277 @@
+:root {
+  color-scheme: dark;
+  --bg: #14161a;
+  --panel: #1e2228;
+  --line: #2f353e;
+  --text: #e6e9ef;
+  --muted: #9aa4b2;
+  --accent: #ff7a1a;
+  --ok: #1fe08a;
+  --ko: #ef476f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 18px 20px 22px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sub {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+legend,
+h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+label {
+  display: block;
+  margin-bottom: 12px;
+}
+
+label > span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  width: 100%;
+  padding: 7px 9px;
+  background: #0f1114;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+}
+
+input[type="range"] {
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.row > * {
+  flex: 1;
+}
+
+button {
+  padding: 8px 12px;
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  color: #17110b;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.ghost {
+  background: #262b33;
+  color: var(--text);
+  font-weight: 500;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 6px 4px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+td.pick {
+  width: 74px;
+  text-align: right;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.dot.on {
+  background: var(--ok);
+}
+
+.dot.off {
+  background: var(--ko);
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: var(--ko);
+  font-size: 12px;
+}
+
+.mono {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+}
+
+/* Preset row editor.
+ *
+ * The panel is roughly 430-470px wide (the SDK sizes its own controls at 320px plus
+ * a 112px label column), so the table is laid out on fixed columns that leave the
+ * name whatever is left over. Fixed layout is what keeps the row inside the panel:
+ * without it, a long value would push the table wider than the WebView and the save
+ * buttons would fall out of sight.
+ */
+.presets-scroll {
+  overflow-x: auto;
+  /* Pulled out to the section's own padding edge so the row can use the full width. */
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+
+.presets {
+  table-layout: fixed;
+  width: 100%;
+  /* Narrower than this and the fields stop being readable. The row scrolls instead of
+   * collapsing, which matters because the host can render the WebView narrower than
+   * the SDK's own reference geometry. */
+  min-width: 380px;
+}
+
+.presets col.c-num {
+  width: 20px;
+}
+
+.presets col.c-value {
+  width: 82px;
+}
+
+.presets col.c-third {
+  width: 72px;
+}
+
+.presets col.c-actions {
+  width: 60px;
+}
+
+.presets td {
+  padding: 4px 3px;
+  vertical-align: middle;
+}
+
+/* These are the fields people actually type into, so they are taller and larger than
+ * the rest of the panel. min-width:0 is what lets a fixed column shrink instead of
+ * forcing the row wider than the panel. */
+.presets input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 9px;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.presets th {
+  font-size: 11px;
+}
+
+input.invalid {
+  border-color: var(--ko);
+}
+
+td.actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* Icon buttons: the label is carried by the title attribute, not by text. */
+td.actions button.icon,
+button.icon {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin-left: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #262b33;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+td.actions button.icon:hover {
+  background: #313743;
+  color: var(--text);
+}
+
+td.actions button.icon svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+button.ghost:disabled {
+  background: #20242b;
+  color: var(--muted);
+}

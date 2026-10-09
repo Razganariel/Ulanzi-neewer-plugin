@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neewer CCT</title>
+    <link rel="stylesheet" href="../../libs/css/uspi.css" />
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body data-actionid="com.ulanzi.ulanzistudio.neewer.cct">
+    <div class="uspi-wrapper">
+    <form id="property-inspector">
+    <h1>Neewer CCT</h1>
+    <p class="sub">Rotate the dial to sweep colour temperature.</p>
+
+      <section>
+        <h2>Device</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Controlled light</span>
+          <select class="uspi-item-value" name="device" id="device"></select>
+        </label>
+        <p class="hint" id="device-hint">Add and name lights from the Neewer Scan action.</p>
+      </section>
+
+      <section>
+        <h2>Dial</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Step</span>
+          <select class="uspi-item-value" name="step">
+            <option value="100">100 K</option>
+            <option value="200">200 K</option>
+            <option value="250">250 K</option>
+            <option value="300">300 K</option>
+            <option value="500">500 K</option>
+          </select>
+        </label>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Minimum (K)</span>
+          <input class="uspi-item-value" type="number" name="min" min="2500" max="8500" step="100" />
+        </label>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Maximum (K)</span>
+          <input class="uspi-item-value" type="number" name="max" min="2500" max="8500" step="100" />
+        </label>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Wrap at the ends</span>
+          <select class="uspi-item-value" name="wrap">
+            <option value="true">Yes</option>
+            <option value="false">Stop</option>
+          </select>
+        </label>
+        <p class="hint">The wire carries the temperature in one byte of 100 K, so 100 K is the finest step.</p>
+        <p class="hint">Press the dial to walk the scene list. Use CCT Up/Down for single steps or CCT Presets for the same list on a key.</p>
+      </section>
+
+      <section>
+        <h2>Presets</h2>
+        <p class="hint">
+          Fill a row and press Save. Nothing is written until you do. Delete removes a
+          scene at once. These are the scenes a dial press walks; the CCT Presets key
+          keeps its own list.
+        </p>
+        <div class="presets-scroll">
+        <table class="presets">
+          <colgroup>
+            <col class="c-num" />
+            <col />
+            <col class="c-value" />
+            <col class="c-third" />
+            <col class="c-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Temp (K)</th>
+              <th>Lum (%)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="preset-rows"></tbody>
+        </table>
+        </div>
+        <p class="error" id="preset-status" style="display: none"></p>
+        <div class="row" style="margin-top: 10px">
+          <button type="button" class="ghost" id="preset-add">Add a scene</button>
+        </div>
+        <p class="hint">
+          Each scene carries its own brightness, because a scene read with a colour
+          meter is not just a temperature: a candle sits around 28% while a cold blue
+          needs the full 100%. Leave the brightness empty to keep whatever the dial
+          last set.
+        </p>
+        <p class="hint">
+          A scene outside the minimum and maximum set above is pulled to the nearer
+          bound when the press applies it, so a scene can be listed without ever
+          appearing. Keep the range wide enough for the list.
+        </p>
+      </section>
+
+      <section>
+        <h2>Light</h2>
+        <div class="status" id="link"><span class="dot"></span><span class="label">connecting...</span></div>
+        <p class="hint mono" id="detail">no device configured</p>
+        <p class="error" id="error" style="display: none"></p>
+      </section>
+
+    </form>
+    </div>
+
+    <script src="../../libs/js/constants.js"></script>
+    <script src="../../libs/js/eventEmitter.js"></script>
+    <script src="../../libs/js/timers.js"></script>
+    <script src="../../libs/js/utils.js"></script>
+    <script src="../../libs/js/ulanziApi.js"></script>
+    <script src="../shared.js"></script>
+    <script src="../presets.js"></script>
+    <script src="inspector.js"></script>
+  </body>
+</html>

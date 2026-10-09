@@ -8,16 +8,24 @@ L'application « Neewer Control Center » n'est **pas** nécessaire : le plugin 
 
 ## 1. Ce que fait le plugin
 
-| Action | Touche | Molette | Réglages |
-|---|---|---|---|
-| **Neewer Power** | allumer / éteindre / basculer | — | comportement au appui |
-| **Neewer Brightness** | preset suivant | luminosité, pas 5 % | min / max / pas / wrap / presets |
-| **Neewer Hue** | preset suivant | teinte, pas 10° | pas / presets |
-| **Neewer Saturation** | retour à 100 % | saturation 0-100 %, pas 5 | pas |
-| **Neewer CCT** | scène suivante | température, pas 250 K | min / max / pas / wrap / scènes |
-| **Neewer Scan** | scanne et apparie la lampe | compteur de devices | durée, filtre |
+| Action | Touche / molette | Réglages |
+|---|---|---|
+| **Power** | touche : tout / allumer / éteindre | comportement au appui |
+| **Brightness** | molette : luminosité | min / max / pas / bornes / presets |
+| **Brightness Up** · **Down** | touche : un cran | pas |
+| **Hue** | molette : teinte, pression = preset suivant | pas / presets |
+| **Hue Presets** | touche : parcourt les couleurs | liste de couleurs |
+| **Hue Up** · **Down** | touche : un cran de teinte | pas |
+| **Saturation** | molette : saturation | min / max / pas / presets |
+| **Saturation Up** · **Down** | touche : un cran | pas |
+| **CCT** | molette : température, pression = scène suivante | min / max / pas / bornes |
+| **CCT Presets** | touche : parcourt les scènes | liste de scènes |
+| **CCT Up** · **Down** | touche : un cran de température | pas |
+| **Scan** | touche : apparie une lampe | durée, filtre |
 
-Un état unique est partagé par toutes les touches : l'icône et l'affichage de la molette reflètent toujours la valeur réelle en cache.
+Chaque action est indépendante : une instance est liée à une lampe par son réglage *Device*, et les actions d'une même lampe partagent son état en cache.
+
+> **Ce que le deck affiche est votre dernière commande, pas une mesure de la lampe.** Ces lampes ne se lisent pas : voir §8, c'est une contrainte du matériel, pas un réglage.
 
 ## 2. Protocole utilisé
 
@@ -86,18 +94,18 @@ Copier le dossier complet `release/com.ulanzi.ulanzistudio.neewer.ulanziPlugin` 
 | Windows | `%AppData%\Ulanzi\UlanziDeck\Plugins` |
 | macOS | `~/Library/Application Support/Ulanzi/UlanziDeck/Plugins` |
 
-Redémarrer UlanziStudio. Le plugin apparaît dans la liste, avec 4 actions.
+Redémarrer UlanziStudio. Le plugin apparaît dans la liste, avec 16 actions.
 
 ## 6. Enregistrer des lampes
 
 Le plugin ne pilote pas un nombre fixe de lampes : la liste est ouverte, et **chaque instance d'action choisit la lampe qu'elle contrôle**.
 
-1. Poser l'action **Neewer Scan** sur une touche et l'ouvrir dans l'inspecteur de propriétés.
+1. Poser l'action **Scan** sur une touche et l'ouvrir dans l'inspecteur de propriétés.
 2. *Add* sur la lampe trouvée dans *Found devices* — ou saisir l'adresse dans *Manual* puis *Add*.
    - **1 seule** lampe trouvée au scan → elle est enregistrée et liée à cette touche automatiquement.
    - **aucune** lampe nommée NEEWER → les autres devices à portée sont listés sous *Other devices*, une lampe peut diffuser sans annoncer son nom.
 3. Renommer chaque lampe dans *Registered lights* pour les distinguer (le nom sert aussi d'étiquette sur les touches).
-4. Sur les actions **Power**, **Brightness** et **Colour**, choisir la lampe dans *Device*.
+4. Sur **toutes** les actions, choisir la lampe dans *Device*.
    - *Default device* = la première lampe enregistrée ; utile quand on n'a qu'une lampe et qu'on ne veut pasMultiplier les réglages.
 5. *Forget* retire une lampe du registre. Les réglages des touches qui la visaient retombent sur la lampe par défaut.
 
@@ -125,21 +133,47 @@ Lancer UlanziStudio avec les flags de debug (clic droit sur le raccourci → Pro
 
 ## 8. Limites connues
 
-- **RÉSOLU — le transport est natif.** `noble` ne parvenait pas à découvrir les caractéristiques de la RGB62 alors que WinRT énumérait les mêmes services et caractéristiques sans difficulté. La cause était la couche noble, pas la lampe ni Windows. `nlink.exe` (C++/WinRT) prend désormais le relais ; les 8 trames du protocole ont été validées physiquement par ce chemin. Voir `docs/session-2026-09-28-bluetooth.md`.
+### La lampe ne se lit pas : le plugin ne connaît que ses propres commandes
+
+C'est la limite la plus importante du plugin, et elle n'est pas contournable par une modification de code. Tout ce que le deck affiche vient de **la dernière commande envoyée**, mémorisée par lampe ; rien ne vient de la lampe.
+
+**Ce qui a été vérifié sur une RGB62 réelle, le 2026-10-09 :**
+
+| Voie de lecture | Résultat |
+|---|---|
+| Trame de lecture dans le protocole | **inexistante** — le protocole n'a que des écritures : marche `0x81`, couleur `0x86`, température `0x87`, effets `0x88` |
+| Commande `status` du transport natif | ne renvoie que l'état de la **liaison BLE**, pas celui de la lampe |
+| Trame `0x05` que la lampe envoie seule à l'ouverture | l'octet de niveau vaut **100 lampe allumée comme lampe éteinte**, et sur un redémarrage il n'est **pas livré du tout** |
+| Réglage de la lampe avec ses propres boutons | **aucune notification** émise, la lampe ne publie rien |
+
+Les notifications `0x81` (marche/arrêt) n'arrivent qu'en **réponse à une commande** : sur une session de 39 s sans aucune commande, l'état n'a pas bougé d'un cran, et le premier `arrêt` observé est arrivé 430 ms après une pression.
+
+**Conséquences concrètes :**
+
+- Si vous réglez la lampe **avec ses boutons ou avec l'app Neewer**, le deck ne l'apprend pas. Il affichera votre dernière commande, pas l'état physique.
+- La touche Power montre ce que vous avez demandé en dernier, pas ce que la lampe fait réellement.
+- Le plugin **n'écrit rien à la connexion** : il n'allume ni n'éteint votre lampe au démarrage.
+- L'état mémorisé est **par lampe**, restauré au démarrage. Au premier lancement après l'installation, et tant que vous n'avez rien commandé, les valeurs par défaut s'appliquent — elles ne viennent pas de la lampe.
+- Les crans de molette qui dépassent une borne **s'arrêtent** (luminosité, saturation) au lieu de revenir à l'autre extrémité : une molette à 100 % ne fait plus tomber la lampe à 5 %. Le réglage *Wrap* de l'inspecteur permet de revenir au balayage circulaire. La teinte et la température continuent de boucler, ces grandeurs étant cycliques par nature.
+
+### Autres limites
+
+- **Le transport est natif.** `noble` ne parvenait pas à découvrir les caractéristiques de la RGB62 alors que WinRT énumérait les mêmes services et caractéristiques sans difficulté. La cause était la couche noble, pas la lampe ni Windows. `nlink.exe` (C++/WinRT) prend désormais le relais ; les 8 trames du protocole ont été validées physiquement par ce chemin. Voir `docs/session-2026-09-28-bluetooth.md`.
 - **L'appairage Windows est requis.** Contrepartie directe du passage à `FromBluetoothAddressAsync` : la lampe doit être connue de l'OS. C'est la seule limite introduite par ce transport.
-- La **validation multi-appareils reste à faire** : l'architecture est en place (un lien et une file d'écriture par lampe), mais une seule RGB62 a été testée.
-- Le **retour d'état** dépend des notifications de la lampe. Si la RGB62 n'en émet pas, l'état est celui de la dernière commande envoyée (cache local) — c'est suffisant pour l'usage au daily mais ce n'est pas une lecture de la valeur physique.
+- La **validation multi-appareils reste à faire** : l'architecture est en place (un lien, une file d'écriture et un état mémorisé par lampe), mais une seule RGB62 a été testée.
 - Les **effets FX** (Cop Car, Candlelight, Hue Loop…) ne sont pas exposés : les trames longues correspondantes n'ont pas été vérifiées sur la RGB62. Le module `protocol.js` a la place pour les ajouter (`OP.EFFECT`).
 - Il n'y a **pas de groupes** : chaque touche se lie à une seule lampe. Un même preset n'est donc pas appliqué à toutes les lampes d'un coup, il faut une touche par lampe.
 - **La RGB62 diffuse en continu tant qu'elle est alimentée et libre**, et se tait complètement dès qu'un client la tient. Elle ne « diffuse pas par salves » : le motif inverse avait été mal interprété pendant longtemps, parce que le seul état où la lampe se tait est précisément celui où il est normal qu'elle se taise.
 - Trame d'identité émise par la lampe à l'ouverture du lien, relevée en conditions réelles :
-  `78 05 07 F4 9F 7F 53 F0 B8 64 F5` → opcode `0x05`, 7 octets de charge utile : l'adresse MAC sur 6 octets puis un octet de niveau, et le checksum final. La structure est sur **11 octets** et le dernier octet est bien un checksum valide — c'est l'octet de niveau qui varie d'un envoi à l'autre (`64`, `F0`, `41`, `1E` relevés successivement), ce qui en fait un compteur, pas un checksum. Seul `0x05` a été observé ; la lampe **n'accuse pas** les commandes écrites.
+  `78 05 07 F4 9F 7F 53 F0 B8 64 F5` → opcode `0x05`, 7 octets de charge utile : l'adresse MAC sur 6 octets puis un octet de niveau, et le checksum final. La structure est sur **11 octets** et le dernier octet est un checksum valide. L'octet de niveau a varié d'un envoi à l'autre (`64`, `F0`, `41`, `1E` relevés en 2026-09) mais **il ne reflète ni la marche ni la luminosité** : en 2026-10 il valait `64` (=100) lampe allumée et éteinte, et n'était pas livré sur un redémarrage. Il n'est donc exploité par le plugin que comme un fait de format, jamais comme un état.
+- Seul `0x05` a été observé en émission spontanée ; la lampe **n'accuse pas** les commandes écrites par un opcode distinct.
+
 
 ## 9. Arborescence
 
 ```
 plugin/                             source du plugin
-  manifest.json                     4 actions, UUID 4 segments, Node.js (CodePath .js)
+  manifest.json                     16 actions, UUID 4 segments, Node.js (CodePath .js)
   package.json                      type: module + dépendance ws
   native/
     nlink.cpp                       transport BLE C++/WinRT (source)

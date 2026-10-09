@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neewer Hue Presets</title>
+    <link rel="stylesheet" href="../../libs/css/uspi.css" />
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body data-actionid="com.ulanzi.ulanzistudio.neewer.hue-presets">
+    <div class="uspi-wrapper">
+    <form id="property-inspector">
+    <h1>Neewer Hue Presets</h1>
+    <p class="sub">Every press walks the presets in order and wraps at the end.</p>
+
+      <section>
+        <h2>Device</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Controlled light</span>
+          <select class="uspi-item-value" name="device" id="device"></select>
+        </label>
+        <p class="hint" id="device-hint">Add and name lights from the Neewer Scan action.</p>
+      </section>
+
+      <section>
+        <h2>Presets</h2>
+        <p class="hint">
+          Fill a row and press Save. Nothing is written until you do, so a half typed
+          preset never reaches the light. Delete removes a preset at once.
+        </p>
+        <div class="presets-scroll">
+        <table class="presets">
+          <colgroup>
+            <col class="c-num" />
+            <col />
+            <col class="c-value" />
+            <col class="c-third" />
+            <col class="c-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Teinte (°)</th>
+              <th>Sat (%)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="preset-rows"></tbody>
+        </table>
+        </div>
+        <p class="error" id="preset-status" style="display: none"></p>
+        <div class="row" style="margin-top: 10px">
+          <button type="button" class="ghost" id="preset-add">Add a preset</button>
+        </div>
+        <p class="hint">
+          Leave the saturation empty to keep whatever the dial last set. Put the Hue
+          action on a dial to sweep instead of stepping.
+        </p>
+      </section>
+
+      <section>
+        <h2>Light</h2>
+        <div class="status" id="link"><span class="dot"></span><span class="label">connecting...</span></div>
+        <p class="hint mono" id="detail">no device configured</p>
+        <p class="error" id="error" style="display: none"></p>
+      </section>
+
+    </form>
+    </div>
+
+    <script src="../../libs/js/constants.js"></script>
+    <script src="../../libs/js/eventEmitter.js"></script>
+    <script src="../../libs/js/timers.js"></script>
+    <script src="../../libs/js/utils.js"></script>
+    <script src="../../libs/js/ulanziApi.js"></script>
+    <script src="../shared.js"></script>
+    <script src="../presets.js"></script>
+    <script src="inspector.js"></script>
+  </body>
+</html>

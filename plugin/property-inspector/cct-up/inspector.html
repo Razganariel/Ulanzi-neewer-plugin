@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neewer CCT Up</title>
+    <link rel="stylesheet" href="../../libs/css/uspi.css" />
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body data-actionid="com.ulanzi.ulanzistudio.neewer.cct-up">
+    <div class="uspi-wrapper">
+    <form id="property-inspector">
+    <h1>Neewer CCT Up</h1>
+    <p class="sub">Every press raises the colour temperature one step, towards the cool end.</p>
+
+      <section>
+        <h2>Device</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Controlled light</span>
+          <select class="uspi-item-value" name="device" id="device"></select>
+        </label>
+        <p class="hint" id="device-hint">Add and name lights from the Neewer Scan action.</p>
+      </section>
+
+      <section>
+        <h2>Press</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Step (K)</span>
+          <select class="uspi-item-value" name="step">
+            <option value="100">100 K</option>
+            <option value="200">200 K</option>
+            <option value="300">300 K</option>
+            <option value="500">500 K</option>
+            <option value="1000">1000 K</option>
+          </select>
+        </label>
+        <p class="hint">
+          Steps land on the 100 K grid, because that is what the wire carries. The
+          light keeps its current brightness, and stops at 8500 K instead of
+          wrapping. Put the CCT action on a dial to sweep instead.
+        </p>
+      </section>
+
+      <section>
+        <h2>Light</h2>
+        <div class="status" id="link"><span class="dot"></span><span class="label">connecting...</span></div>
+        <p class="hint mono" id="detail">no device configured</p>
+        <p class="error" id="error" style="display: none"></p>
+      </section>
+
+    </form>
+    </div>
+
+    <script src="../../libs/js/constants.js"></script>
+    <script src="../../libs/js/eventEmitter.js"></script>
+    <script src="../../libs/js/timers.js"></script>
+    <script src="../../libs/js/utils.js"></script>
+    <script src="../../libs/js/ulanziApi.js"></script>
+    <script src="../shared.js"></script>
+    <script src="../stepper.js"></script>
+    <script src="inspector.js"></script>
+  </body>
+</html>

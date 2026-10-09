@@ -1,0 +1,16 @@
+{
+  "name": "ulanzi-neewer-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Build tooling for the Ulanzi D200X Neewer RGB62 plugin",
+  "scripts": {
+    "sdk": "node scripts/install-sdk.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.js",
+    "release": "npm run sdk && npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neewer Brightness</title>
+    <link rel="stylesheet" href="../../libs/css/uspi.css" />
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body data-actionid="com.ulanzi.ulanzistudio.neewer.brightness">
+    <div class="uspi-wrapper">
+    <form id="property-inspector">
+    <h1>Neewer Brightness</h1>
+    <p class="sub">Rotate to sweep brightness, press the dial to walk the presets.</p>
+
+      <section>
+        <h2>Device</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Controlled light</span>
+          <select class="uspi-item-value" name="device" id="device"></select>
+        </label>
+        <p class="hint" id="device-hint">Add and name lights from the Neewer Scan action.</p>
+      </section>
+
+      <section>
+        <h2>Range</h2>
+        <div class="row">
+          <label class="uspi-item">
+            <span class="uspi-item-label">Min %</span>
+            <input class="uspi-item-value" type="number" name="min" min="1" max="100" step="1" />
+          </label>
+          <label class="uspi-item">
+            <span class="uspi-item-label">Max %</span>
+            <input class="uspi-item-value" type="number" name="max" min="1" max="100" step="1" />
+          </label>
+          <label class="uspi-item">
+            <span class="uspi-item-label">Step</span>
+            <input class="uspi-item-value" type="number" name="step" min="1" max="25" step="1" />
+          </label>
+        </div>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Wrap around at the limits</span>
+          <select class="uspi-item-value" name="wrap">
+            <option value="true">Yes</option>
+            <option value="false">No, clamp</option>
+          </select>
+        </label>
+      </section>
+
+      <section>
+        <h2>On dial press</h2>
+        <p class="hint">
+          Fill a row and press Save. Nothing is written until you do. Delete removes a
+          value at once.
+        </p>
+        <div class="presets-scroll">
+        <table class="presets">
+          <colgroup>
+            <col class="c-num" />
+            <col />
+            <col class="c-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Brightness (%)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="preset-rows"></tbody>
+        </table>
+        </div>
+        <p class="error" id="preset-status" style="display: none"></p>
+        <div class="row" style="margin-top: 10px">
+          <button type="button" class="ghost" id="preset-add">Add a value</button>
+        </div>
+        <p class="hint">Pressing the dial steps to the next value here and wraps at the end.</p>
+      </section>
+
+      <section>
+        <h2>Light</h2>
+        <div class="status" id="link"><span class="dot"></span><span class="label">connecting...</span></div>
+        <p class="hint mono" id="detail">no device configured</p>
+        <p class="error" id="error" style="display: none"></p>
+      </section>
+
+    </form>
+    </div>
+
+    <script src="../../libs/js/constants.js"></script>
+    <script src="../../libs/js/eventEmitter.js"></script>
+    <script src="../../libs/js/timers.js"></script>
+    <script src="../../libs/js/utils.js"></script>
+    <script src="../../libs/js/ulanziApi.js"></script>
+    <script src="../shared.js"></script>
+    <script src="../presets.js"></script>
+    <script src="inspector.js"></script>
+  </body>
+</html>
