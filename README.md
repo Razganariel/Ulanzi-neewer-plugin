@@ -123,11 +123,10 @@ Lancer UlanziStudio avec les flags de debug (clic droit sur le raccourci → Pro
 "C:\...\Ulanzi Studio.exe" --log --webRemoteDebug --nodeRemoteDebug
 ```
 
-- **Log du service principal** : `%AppData%\Ulanzi\UlanziStudio\logs\com.ulanzi.ulanzistudio.neewer.log` (le nom du fichier est l'UUID du service principal)
+- **Log du service principal** : `%AppData%\Ulanzi\UlanziStudio\logs\com.ulanzi.ulanzistudio.neewer.log` (le nom du fichier est l'UUID du service principal). L'hôte n'en conserve que les appels de niveau `error` : les messages `info` restent visibles dans la console du processus.
 - **Inspecteurs de propriétés** : `http://localhost:9292` liste tous les WebView HTML chargés
 - **Service Node** : `manifest.json` contient déjà `"Inspect": "--inspect=127.0.0.1:9212"` ; ouvrir `chrome://inspect` dans Chrome et ajouter la cible `127.0.0.1:9212`
-- **Trames BLE** : chaque trame émise est tracée dans le log, ex. `tx 78860458011864D7`
-- **Trace complète** : `%AppData%\Ulanzi\UlanziDeck\logs\com.ulanzi.ulanzistudio.neewer.trace.log`, chaque trame websocket dans les deux sens. Le fichier tourne à 8 Mo puis est mis en rotation (2 générations conservées) : sans plafond, une longue session produit un gigaoctet de bruit.
+- **Aucune trace des trames** : ni websocket ni BLE. Une commande partie sans réponse n'apparaît donc nulle part, et un clic sans effet est indistinguable d'un hôte qui n'a rien envoyé. C'est un choix : la trace écrivait en continu sur le disque pour une.session normale, et ce qui apportait ne justifiait pas ce coût.
 - **Transport natif indisponible** : si `nlink.exe` est absent ou refuse de démarrer, le message d'erreur explicite apparaît dans le log et nomme le chemin attendu. Vérifier la présence de `native/nlink.exe` dans le dossier du plugin et la build Windows.
 - **Aucun contrôle de l'état de la radio avant le scan** : `nlink.exe` ne teste pas l'adaptateur, il tente le scan. Un scan vide signifie « rien vu pendant la fenêtre », pas forcément « radio éteinte ».
 
@@ -187,6 +186,9 @@ plugin/                             source du plugin
         ble.js                        transport natif : scan, connexion, écriture, notifications
         light.js                      session d'une lampe : état + superviseur de reconnexion
         devices.js                    registre des lampes (liste ouverte) + scan partagé
+        context.js                    contextes hôte : création, déplacement, oubli
+        settings.js                   forme des réglages globaux écrits chez l'hôte
+        shutdown.js                   écriture de la dernière commande à la sortie
         ui.js                         setStateIcon / setFeedback tolérants aux anciennes versions
     actions/                        un module par action (render / onRun / onDialRotate)
   property-inspector/

@@ -222,8 +222,9 @@ test('stopping clears the timer of a command it rejects', async () => {
 });
 
 test('the link emits a raw line for anything, including ones it cannot place', () => {
-  // trace.js listens here, so a malformed line still has to reach the log rather than
-  // vanish: it is the only evidence of what the helper actually said.
+  // The readiness handshake listens here, so every line has to be emitted, not only the
+  // ones that resolve a command. A line that fires nothing is a line nobody can account
+  // for when the helper says something unexpected.
   const link = readyLink();
   const lines = [];
   link.on('_line', (line) => lines.push(line));
