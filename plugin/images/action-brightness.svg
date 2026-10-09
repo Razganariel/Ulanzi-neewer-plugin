@@ -1,0 +1,11 @@
+<svg width="72" height="72" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+  <rect width="72" height="72" rx="12" fill="#1a1a1a"/>
+  <defs>
+    <linearGradient id="brightDiag" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3a3a3a"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <circle cx="36" cy="36" r="21" fill="url(#brightDiag)"/>
+  <circle cx="36" cy="36" r="21" fill="none" stroke="#ffffff" stroke-width="1" stroke-opacity="0.25"/>
+</svg>

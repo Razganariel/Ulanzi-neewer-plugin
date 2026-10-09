@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neewer Device</title>
+    <link rel="stylesheet" href="../../libs/css/uspi.css" />
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body data-actionid="com.ulanzi.ulanzistudio.neewer.scan">
+    <div class="uspi-wrapper">
+    <form id="property-inspector">
+    <h1>Neewer Devices</h1>
+    <p class="sub">Register every Neewer light you want to control, then bind each one to a key.</p>
+
+      <section>
+        <h2>Device</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">This control drives</span>
+          <select class="uspi-item-value" name="device" id="device"></select>
+        </label>
+        <p class="hint" id="registered-title"></p>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Address</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="registered">
+            <tr>
+              <td colspan="3" class="hint">No light registered yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Discovery</h2>
+        <div class="row">
+          <label class="uspi-item">
+            <span class="uspi-item-label">Scan duration (s)</span>
+            <input class="uspi-item-value" type="number" name="duration" min="2" max="20" step="1" />
+          </label>
+          <label class="uspi-item">
+            <span class="uspi-item-label">Filter</span>
+            <select class="uspi-item-value" name="onlyNeewer">
+              <option value="true">Neewer devices only</option>
+              <option value="false">Show every BLE device</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button type="button" id="scan">Scan</button>
+          <button type="button" id="reconnect" class="ghost">Reconnect</button>
+        </div>
+        <p class="error" id="error" style="display: none"></p>
+      </section>
+
+      <section>
+        <h2>Manual</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">BLE address</span>
+          <input type="text" id="address" name="address" placeholder="AA:BB:CC:DD:EE:FF" class="uspi-item-value mono" />
+        </label>
+        <div class="row">
+          <button type="button" id="apply" class="ghost">Use this address</button>
+        </div>
+        <p class="hint" id="picked"></p>
+        <p class="hint">The address is what Windows shows for the light; the Neewer app is not required.</p>
+      </section>
+
+      <section>
+        <h2>Found devices</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Address</th>
+              <th>RSSI</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="devices">
+            <tr>
+              <td colspan="4" class="hint">Run a scan to list the Neewer lights in range.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Other devices</h2>
+        <p class="hint" id="others-title"></p>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Address</th>
+              <th>RSSI</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="others">
+            <tr>
+              <td colspan="4" class="hint">If the scan finds no Neewer name, every device in range is listed here.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Status</h2>
+        <div class="status" id="link"><span class="dot"></span><span class="label">connecting...</span></div>
+        <p class="hint mono" id="detail">no device configured</p>
+      </section>
+
+    </form>
+    </div>
+
+    <script src="../../libs/js/constants.js"></script>
+    <script src="../../libs/js/eventEmitter.js"></script>
+    <script src="../../libs/js/timers.js"></script>
+    <script src="../../libs/js/utils.js"></script>
+    <script src="../../libs/js/ulanziApi.js"></script>
+    <script src="../shared.js"></script>
+    <script src="inspector.js"></script>
+  </body>
+</html>

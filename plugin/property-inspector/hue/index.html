@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neewer Hue</title>
+    <link rel="stylesheet" href="../../libs/css/uspi.css" />
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body data-actionid="com.ulanzi.ulanzistudio.neewer.hue">
+    <div class="uspi-wrapper">
+    <form id="property-inspector">
+    <h1>Neewer Hue</h1>
+    <p class="sub">Rotate to sweep the hue, tap to cycle the presets.</p>
+
+      <section>
+        <h2>Device</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Controlled light</span>
+          <select class="uspi-item-value" name="device" id="device"></select>
+        </label>
+        <p class="hint" id="device-hint">Add and name lights from the Neewer Scan action.</p>
+      </section>
+
+      <section>
+        <h2>Dial</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Hue step (degrees)</span>
+          <select class="uspi-item-value" name="step">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option value="30">30</option>
+          </select>
+        </label>
+        <p class="hint">The wire carries the hue as two bytes, so any step is exact.</p>
+      </section>
+
+      <section>
+        <h2>Presets</h2>
+        <label class="uspi-item">
+          <span class="uspi-item-label">Hue presets (degrees)</span>
+          <input type="text" name="presets" placeholder="0,30,60,120,180,240,300" />
+        </label>
+        <p class="hint">A tap jumps to the next preset in this list and wraps at the end.</p>
+      </section>
+
+      <section>
+        <h2>Light</h2>
+        <div class="status" id="link"><span class="dot"></span><span class="label">connecting...</span></div>
+        <p class="hint mono" id="detail">no device configured</p>
+        <p class="error" id="error" style="display: none"></p>
+      </section>
+
+    </form>
+    </div>
+
+    <script src="../../libs/js/constants.js"></script>
+    <script src="../../libs/js/eventEmitter.js"></script>
+    <script src="../../libs/js/timers.js"></script>
+    <script src="../../libs/js/utils.js"></script>
+    <script src="../../libs/js/ulanziApi.js"></script>
+    <script src="../shared.js"></script>
+    <script src="inspector.js"></script>
+  </body>
+</html>

@@ -1,0 +1,280 @@
+{
+  "Author": "Ulanzi-neewer-plugin",
+  "Name": "Neewer RGB Control",
+  "Description": "Control one or many Neewer BLE studio lights (RGB62 and others) from an Ulanzi D200X. Each key is bound to a registered light.",
+  "Icon": "images/plugin.svg",
+  "Version": "0.1.0",
+  "Category": "Lighting",
+  "CodePath": "service/app.js",
+  "Type": "JavaScript",
+  "PrivateAPI": true,
+  "Inspect": "--inspect=127.0.0.1:9212",
+  "UUID": "com.ulanzi.ulanzistudio.neewer",
+  "Actions": [
+    {
+      "Name": "Power",
+      "Icon": "images/action-power-off.svg",
+      "PropertyInspectorPath": "property-inspector/power/inspector.html",
+      "Tooltip": "Turn the Neewer light on or off",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.power",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": [
+        "D200X"
+      ],
+      "States": [
+        {
+          "Name": "Off",
+          "Image": "images/action-power-off.svg"
+        },
+        {
+          "Name": "On",
+          "Image": "images/action-power-on.svg"
+        }
+      ]
+    },
+    {
+      "Name": "Brightness",
+      "Icon": "images/action-brightness.svg",
+      "PropertyInspectorPath": "property-inspector/brightness/inspector.html",
+      "Tooltip": "Dial only: rotate to sweep brightness, press to walk the presets",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.brightness",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Encoder"
+      ],
+      "Devices": [],
+      "Encoder": {
+        "layout": "$UA1"
+      },
+      "States": [
+        {
+          "Name": "Brightness",
+          "Image": "images/action-brightness.svg"
+        }
+      ]
+    },
+    {
+      "Name": "Brightness Up",
+      "Icon": "images/action-brightness-up.svg",
+      "PropertyInspectorPath": "property-inspector/brightness-up/inspector.html",
+      "Tooltip": "Each press makes the light one step brighter",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.brightness-up",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": [],
+      "States": [
+        {
+          "Name": "Brightness up",
+          "Image": "images/action-brightness-up.svg"
+        }
+      ]
+    },
+    {
+      "Name": "Brightness Down",
+      "Icon": "images/action-brightness-down.svg",
+      "PropertyInspectorPath": "property-inspector/brightness-down/inspector.html",
+      "Tooltip": "Each press makes the light one step dimmer",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.brightness-down",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": [],
+      "States": [
+        {
+          "Name": "Brightness down",
+          "Image": "images/action-brightness-down.svg"
+        }
+      ]
+    },
+    {
+      "Name": "Hue",
+      "Icon": "images/action-color.svg",
+      "PropertyInspectorPath": "property-inspector/hue/inspector.html",
+      "Tooltip": "Rotate to sweep the hue, press the dial or the key to walk the presets",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.hue",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Encoder"
+      ],
+      "Devices": [],
+      "Encoder": {
+        "layout": "$UA1"
+      },
+      "States": [
+        {
+          "Name": "Hue",
+          "Image": "images/action-color.svg"
+        }
+      ]
+    },
+    {
+      "Name": "Saturation",
+      "Icon": "images/action-saturation.svg",
+      "PropertyInspectorPath": "property-inspector/saturation/inspector.html",
+      "Tooltip": "Dial only: rotate to sweep saturation, press to walk the presets",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.saturation",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Encoder"
+      ],
+      "Devices": [],
+      "Encoder": {
+        "layout": "$UA1"
+      },
+      "States": [
+        {
+          "Name": "Saturation",
+          "Image": "images/action-saturation.svg"
+        }
+      ]
+    },
+    {
+      "Name": "Saturation Up",
+      "Icon": "images/action-saturation-up.svg",
+      "PropertyInspectorPath": "property-inspector/saturation-up/inspector.html",
+      "Tooltip": "Each press makes the colour one step more vivid",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.saturation-up",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": [],
+      "States": [
+        {
+          "Name": "Saturation up",
+          "Image": "images/action-saturation-up.svg"
+        }
+      ]
+    },
+    {
+      "Name": "Saturation Down",
+      "Icon": "images/action-saturation-down.svg",
+      "PropertyInspectorPath": "property-inspector/saturation-down/inspector.html",
+      "Tooltip": "Each press makes the colour one step less vivid",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.saturation-down",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": [],
+      "States": [
+        {
+          "Name": "Saturation down",
+          "Image": "images/action-saturation-down.svg"
+        }
+      ]
+    },
+    {
+      "Name": "CCT",
+      "Icon": "images/action-cct.svg",
+      "PropertyInspectorPath": "property-inspector/cct/inspector.html",
+      "Tooltip": "Dial only: rotate continuously to sweep colour temperature",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.cct",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Encoder"
+      ],
+      "Devices": [],
+      "Encoder": {
+        "layout": "$UA1"
+      },
+      "States": [
+        {
+          "Name": "CCT",
+          "Image": "images/action-cct.svg"
+        }
+      ]
+    },
+    {
+      "Name": "CCT Presets",
+      "Icon": "images/action-cct-presets.svg",
+      "PropertyInspectorPath": "property-inspector/cct-presets/inspector.html",
+      "Tooltip": "Each press walks the measured colour temperature scenes",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.cct-presets",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": [],
+      "States": [
+        {
+          "Name": "CCT presets",
+          "Image": "images/action-cct-presets.svg"
+        }
+      ]
+    },
+    {
+      "Name": "CCT Up",
+      "Icon": "images/action-cct-up.svg",
+      "PropertyInspectorPath": "property-inspector/cct-up/inspector.html",
+      "Tooltip": "Each press raises the colour temperature by one step",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.cct-up",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": [],
+      "States": [
+        {
+          "Name": "CCT up",
+          "Image": "images/action-cct-up.svg"
+        }
+      ]
+    },
+    {
+      "Name": "CCT Down",
+      "Icon": "images/action-cct-down.svg",
+      "PropertyInspectorPath": "property-inspector/cct-down/inspector.html",
+      "Tooltip": "Each press lowers the colour temperature by one step",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.cct-down",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": [],
+      "States": [
+        {
+          "Name": "CCT down",
+          "Image": "images/action-cct-down.svg"
+        }
+      ]
+    },
+    {
+      "Name": "Scan",
+      "Icon": "images/action-scan.svg",
+      "PropertyInspectorPath": "property-inspector/scan/inspector.html",
+      "Tooltip": "Scan for Neewer lights over Bluetooth LE",
+      "UUID": "com.ulanzi.ulanzistudio.neewer.scan",
+      "SupportedInMultiActions": false,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": [],
+      "States": [
+        {
+          "Name": "Scan",
+          "Image": "images/action-scan.svg"
+        }
+      ]
+    }
+  ],
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    },
+    {
+      "Platform": "mac",
+      "MinimumVersion": "10.15"
+    }
+  ],
+  "Software": {
+    "MinVersion": "3.0.11"
+  }
+}
