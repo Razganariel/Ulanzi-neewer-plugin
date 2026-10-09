@@ -46,16 +46,39 @@
     }
   }
 
+  /** The one form this panel owns, and how its settings reach the service. */
+  let activeForm = null;
+  let repack = null;
+  let sendParams = () => {};
+
   function bootForm(form, options) {
-    const sendParams = Utils.debounce((params) => $UD.sendParamFromPlugin(params), 150);
+    sendParams = Utils.debounce((params) => $UD.sendParamFromPlugin(params), 150);
+    activeForm = form;
+    repack = options.repack || null;
 
     $UD.connect(document.body.dataset.actionid);
-    form.addEventListener('change', () => sendParams(Utils.getFormValue(form)));
+
+    // Enter inside a text field submits the form, and a submitted form in a WebView
+    // navigates, which loses the panel and everything typed into it. Nothing here is
+    // ever submitted; the save buttons do it explicitly.
+    form.addEventListener('submit', (event) => event.preventDefault());
+
+    const collect = () => {
+      const raw = Utils.getFormValue(form);
+      return repack ? repack(raw) : raw;
+    };
+
+    // Panels that save explicitly opt out: a preset list is rebuilt from the settings
+    // it receives, so saving on every keystroke would move the caret out from under
+    // whoever is typing.
+    if (options.autoSave !== false) {
+      form.addEventListener('change', () => sendParams(collect()));
+    }
 
     const applySettings = (settings) => {
       Utils.setFormValue(settings, form);
-      // Mirrors of a raw settings string (the CCT scene list) need the value
-      // after hydration, not just the fields the form knows how to draw.
+      // Mirrors of a raw settings string (the CCT scene list, the preset rows) need
+      // the value after hydration, not just the fields the form knows how to draw.
       if (options.onSettings) options.onSettings(settings || {});
     };
     $UD.onParamFromApp((message) => applySettings(message.param));
@@ -94,6 +117,19 @@
   window.PI = {
     el(id) {
       return document.getElementById(id);
+    },
+    /**
+     * The settings the form currently describes, reshaped by the inspector.
+     *
+     * @returns {object}
+     */
+    read() {
+      const raw = activeForm ? Utils.getFormValue(activeForm) : {};
+      return repack ? repack(raw) : raw;
+    },
+    /** Hands settings to the main service, debounced like the automatic path. */
+    push(settings) {
+      sendParams(settings);
     },
     on(id, event, fn) {
       const node = document.getElementById(id);

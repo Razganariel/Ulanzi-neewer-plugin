@@ -11,7 +11,7 @@
     <div class="uspi-wrapper">
     <form id="property-inspector">
     <h1>Neewer Hue Presets</h1>
-    <p class="sub">Every press walks the list in order and wraps at the end.</p>
+    <p class="sub">Every press walks the presets in order and wraps at the end.</p>
 
       <section>
         <h2>Device</h2>
@@ -24,20 +24,39 @@
 
       <section>
         <h2>Presets</h2>
-        <label class="uspi-item">
-          <span class="uspi-item-label">Hue presets (degrees)</span>
-          <input type="text" name="presets" placeholder="0,30,60,120,180,240,300" />
-        </label>
         <p class="hint">
-          One entry per preset, separated by commas, in degrees from 0 to 359. A
-          press jumps to the next one above the current hue and wraps back to the
-          first at the end. Saturation and brightness are left as the dial set them.
+          Fill a row and press Save. Nothing is written until you do, so a half typed
+          preset never reaches the light. Delete removes a preset at once.
         </p>
-        <table class="mono" id="preset-table">
-          <thead><tr><th>#</th><th>Hue</th></tr></thead>
-          <tbody></tbody>
+        <div class="presets-scroll">
+        <table class="presets">
+          <colgroup>
+            <col class="c-num" />
+            <col />
+            <col class="c-value" />
+            <col class="c-third" />
+            <col class="c-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Teinte (°)</th>
+              <th>Sat (%)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="preset-rows"></tbody>
         </table>
-        <p class="hint">Put the Hue action on a dial to sweep the hue instead.</p>
+        </div>
+        <p class="error" id="preset-status" style="display: none"></p>
+        <div class="row" style="margin-top: 10px">
+          <button type="button" class="ghost" id="preset-add">Add a preset</button>
+        </div>
+        <p class="hint">
+          Leave the saturation empty to keep whatever the dial last set. Put the Hue
+          action on a dial to sweep instead of stepping.
+        </p>
       </section>
 
       <section>
@@ -56,6 +75,7 @@
     <script src="../../libs/js/utils.js"></script>
     <script src="../../libs/js/ulanziApi.js"></script>
     <script src="../shared.js"></script>
+    <script src="../presets.js"></script>
     <script src="inspector.js"></script>
   </body>
 </html>

@@ -12,7 +12,7 @@
 
 import { ACTION, LIMITS, STATE } from '../core/constants.js';
 import { rotateSteps } from '../core/dial.js';
-import { clamp, dialStep, nextPreset, parseList } from '../core/params.js';
+import { clamp, dialStep } from '../core/params.js';
 import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.HUE;
@@ -20,7 +20,8 @@ export const uuid = ACTION.HUE;
 export const defaults = {
   device: '',
   step: 10,
-  presets: '0,30,60,120,180,240,300',
+  presets: '0:100,30:100,60:100,120:100,180:100,240:100,300:100',
+  presetNames: 'Red,Orange,Yellow,Green,Cyan,Blue,Magenta',
 };
 
 /** Hue goes 0-359 so that a full turn lands back on 0 instead of 360. */
@@ -33,11 +34,40 @@ export function render({ $UD, context, snap, isEncoder }) {
   setTitle($UD, context, `hue ${value}`);
 }
 
-/** Sets the hue to one value, leaving saturation and brightness alone. */
-export async function applyPreset(ctx, hue) {
+/**
+ * Reads "hue[:saturation]" colours out of the settings string.
+ *
+ * A bare hue keeps the current saturation, which is what a plain degree list means
+ * and what every preset saved before saturation existed means. Splitting only on
+ * separators matters for the same reason it does in `cct.js`: a cell typed as
+ * "120: 80" is one entry, and splitting on the space would shred the saturation.
+ */
+export function parseHuePresets(raw) {
+  const out = [];
+  for (const part of String(raw ?? '').split(/[,|]/)) {
+    const trimmed = part.trim();
+    if (trimmed === '') continue;
+    const [hue, saturation] = trimmed.split(':');
+    const h = clamp(hue, LIMITS.HUE_MIN, MAX, null);
+    if (h === null) continue;
+    const s = saturation === undefined || saturation.trim() === ''
+      ? null
+      : clamp(saturation, LIMITS.SATURATION_MIN, LIMITS.SATURATION_MAX, null);
+    out.push({ hue: h, saturation: s });
+  }
+  return out;
+}
+
+/**
+ * Sets the hue, and the saturation when the preset names one.
+ *
+ * Omitting the saturation leaves it alone: `setHsl` defaults it to the current
+ * value, so a bare hue preset does not quietly flatten a colour the user dialled in.
+ */
+export async function applyPreset(ctx, hue, saturation = null) {
   const { light, report } = ctx;
   try {
-    await light.setHsl(hue);
+    await light.setHsl(hue, saturation ?? light.state.saturation);
   } catch (err) {
     report(err);
   }
@@ -55,13 +85,23 @@ export async function onDialRotate(ctx, message) {
   }
 }
 
-/** Next preset after the current hue, or null when the list is empty. */
+/**
+ * Next preset after the current hue, or null when the list is empty.
+ *
+ * Stepped by position, like the CCT scenes: a value search would assume the list
+ * ascends and would skip any preset the property inspector appended below the current
+ * one, leaving it unreachable. Saturation rides along with the entry it belongs to.
+ *
+ * When the light is not sitting on any preset - the dial moved it - the walk starts at
+ * the first one above the current hue, so a press still moves forward.
+ */
 export function nextHuePreset(ctx, presets) {
   const { settings, snap } = ctx;
-  const list = parseList(presets ?? settings.presets ?? defaults.presets)
-    .map((hue) => clamp(hue, 0, MAX, null))
-    .filter((hue) => hue !== null);
-  return nextPreset(list, snap.hue);
+  const list = parseHuePresets(presets ?? settings.presets ?? defaults.presets);
+  if (!list.length) return null;
+  const at = list.findIndex((preset) => preset.hue === snap.hue);
+  if (at >= 0) return list[(at + 1) % list.length];
+  return list.find((preset) => preset.hue > snap.hue) ?? list[0];
 }
 
 /**
@@ -71,7 +111,7 @@ export function nextHuePreset(ctx, presets) {
 export async function applyNextHuePreset(ctx, presets) {
   const next = nextHuePreset(ctx, presets);
   if (next === null) return;
-  await applyPreset(ctx, next);
+  await applyPreset(ctx, next.hue, next.saturation);
 }
 
 /** Pressing the dial walks the same preset list as the dedicated Hue Presets key. */

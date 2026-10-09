@@ -95,6 +95,25 @@ export const PRESET_DEFAULTS = Object.freeze({
 });
 
 /**
+ * Steps one scene along the list, in the order the user wrote it.
+ *
+ * Walking by position rather than by value is what makes a scene reachable once it
+ * has been added below the current ones. A value search assumes the list ascends,
+ * which stops being true the moment the property inspector appends a row: pressing
+ * on from the hottest scene would jump straight back to the first and the appended
+ * scene would never come up at all.
+ *
+ * When the light is not sitting on any scene - the dial moved it, or another action
+ * did - the walk starts at the first scene above the current value, so a press still
+ * moves forward rather than backwards.
+ */
+export function nextScene(scenes, current) {
+  const at = scenes.findIndex((scene) => scene.kelvin === current);
+  if (at >= 0) return scenes[(at + 1) % scenes.length];
+  return scenes.find((scene) => scene.kelvin > current) ?? scenes[0];
+}
+
+/**
  * Walks the scene list by one, wrapping at the end. Shared by `cct-presets.js`
  * and the dial's own tap on older layouts.
  */
@@ -103,8 +122,7 @@ export async function applyNextScene(ctx, presets) {
   const { min, max } = bounds(settings);
   const scenes = parseScenes(presets ?? settings.presets, min, max);
   if (!scenes.length) return;
-  const current = snap.mode === 'cct' ? snap.cct : -1;
-  const next = scenes.find((scene) => scene.kelvin > current) ?? scenes[0];
+  const next = nextScene(scenes, snap.mode === 'cct' ? snap.cct : -1);
   try {
     await light.setCct(next.kelvin, next.brightness ?? light.state.brightness);
   } catch (err) {

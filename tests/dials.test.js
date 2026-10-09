@@ -99,6 +99,47 @@ test('hue preset helper targets a single hue', async () => {
   assert.deepEqual(light.calls, [['setHsl', 240, 100, 100]]);
 });
 
+test('a scene added below the others still comes up', async () => {
+  // The regression, from a real session: the property inspector appends new scenes at
+  // the end, so "4000" landed after "6500". A walk that searched for the first scene
+  // above the current value jumped from 6500 straight back to 3400, and the appended
+  // scene was never reached at all.
+  const settings = { ...cctPresets.defaults, presets: '3400:28,4500:16,5000:16,5600:28,6500:100,4000:10' };
+  const entries = settings.presets.split(',').length;
+  const walk = [];
+  // One full lap starting from a scene in the middle of the list.
+  for (let i = 0; i < entries; i += 1) {
+    const light = L({ mode: 'cct', cct: walk.length ? walk[walk.length - 1] : 5000 });
+    await cctPresets.onRun(ctxFor(light, settings));
+    walk.push(light.calls[0][1]);
+  }
+  assert.deepEqual(
+    walk,
+    [5600, 6500, 4000, 3400, 4500, 5000],
+    'every scene, including the one appended below the others, is reached once per lap'
+  );
+});
+
+test('a hue preset added below the others still comes up', async () => {
+  const settings = { ...huePresets.defaults, presets: '0:100,120:100,240:100,45:100' };
+  const walk = [];
+  for (let i = 0; i < 4; i += 1) {
+    const light = L({ hue: walk.length ? walk[walk.length - 1] : 120 });
+    await huePresets.onRun(ctxFor(light, settings));
+    walk.push(light.calls[0][1]);
+  }
+  assert.deepEqual(walk, [240, 45, 0, 120]);
+});
+
+test('a light sitting between two presets still moves forward', () => {
+  // Nothing to step from when the dial moved the light off a preset, so the walk
+  // starts at the first preset above it rather than backwards.
+  const between = cct.parseScenes('3400,4500,6500', 2500, 8500);
+  assert.equal(cct.nextScene(between, 4000).kelvin, 4500);
+  assert.equal(cct.nextScene(between, 9000).kelvin, 3400, 'past the last one, start over');
+  assert.equal(cct.nextScene(between, 4500).kelvin, 6500);
+});
+
 test('the Hue Presets key walks the list the dial press does', async () => {
   // Same helper on purpose: a dedicated key that drifted from the dial's own press
   // would make the two disagree about what the next preset is.
@@ -109,6 +150,42 @@ test('the Hue Presets key walks the list the dial press does', async () => {
   const dial = L({ hue: 30 });
   await hue.onDialPress(ctxFor(dial, { ...hue.defaults, presets: '0,30,60,120' }));
   assert.deepEqual(dial.calls, key.calls);
+});
+
+test('a hue preset applies its saturation as well as its hue', async () => {
+  // A colour needs both: at saturation 0 the hue is invisible, so a hue-only preset
+  // would land on nothing whenever the dial happened to be at zero.
+  const light = L({ hue: 0, saturation: 0 });
+  await huePresets.onRun(ctxFor(light, { ...huePresets.defaults, presets: '30:80,120:20' }));
+  assert.deepEqual(light.calls, [['setHsl', 30, 80, 100]]);
+
+  const next = L({ hue: 30, saturation: 80 });
+  await huePresets.onRun(ctxFor(next, { ...huePresets.defaults, presets: '30:80,120:20' }));
+  assert.deepEqual(next.calls, [['setHsl', 120, 20, 100]]);
+});
+
+test('a bare hue preset keeps the saturation the dial left', async () => {
+  // Presets saved before saturation existed are bare degrees, and the dial may be
+  // parked on a vivid colour that must survive the press.
+  const light = L({ hue: 0, saturation: 65 });
+  await huePresets.onRun(ctxFor(light, { ...huePresets.defaults, presets: '0,120,240' }));
+  assert.deepEqual(light.calls, [['setHsl', 120, 65, 100]]);
+});
+
+test('the hue preset list ignores what it cannot put on the wire', () => {
+  assert.deepEqual(hue.parseHuePresets('0:100,junk,120:999'), [
+    { hue: 0, saturation: 100 },
+    { hue: 120, saturation: 100 },
+  ]);
+  // A bare hue, a "hue:" with nothing after it, and a separator on either side are
+  // all one entry each.
+  assert.deepEqual(hue.parseHuePresets(' 30 , 120: , | 240 '), [
+    { hue: 30, saturation: null },
+    { hue: 120, saturation: null },
+    { hue: 240, saturation: null },
+  ]);
+  // A space after the colon is part of the same cell, not a second one.
+  assert.deepEqual(hue.parseHuePresets('120: 80'), [{ hue: 120, saturation: 80 }]);
 });
 
 test('the hue nudge buttons step the same amount in both directions', async () => {
