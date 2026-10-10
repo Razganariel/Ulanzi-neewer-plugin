@@ -140,6 +140,127 @@ test('a burst of notches is one write, not one per notch', () => {
   });
 });
 
+test('stopping writes the last belief before the process goes away', async () => {
+  // The debounced write is unref'd, so on the way out it never gets its turn. Closing
+  // UlanziDeck within a second of turning a dial therefore lost that dial, and the next
+  // start showed the light somewhere else than the deck had left it.
+  const { registry, store } = makeRegistry();
+  const device = registry.add({ address: 'AA:AA:AA:AA:AA:AA', name: 'Key' });
+  const light = registry.lights.get(device.id);
+  light.state = { power: true, mode: 'hsl', brightness: 5, hue: 0, saturation: 0, cct: 5600 };
+  light.emit('state', light.snapshot());
+
+  const writes = store.writes.length;
+  registry.stopAll();
+  assert.equal(store.writes.length, writes + 1, 'stopping flushed the pending write');
+  assert.equal(store.writes.at(-1).states[device.id].brightness, 5);
+
+  // Nothing may still be queued to run against a dead process.
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  assert.equal(store.writes.length, writes + 1, 'and the timer did not fire after the flush');
+});
+
+test('removing a light takes it off disk at once', async () => {
+  // The belief about a light is written a moment after the last change, so a removal has
+  // to be written on the spot: waiting would leave a light in the settings that the user
+  // had just deleted.
+  const { registry, store } = makeRegistry();
+  const device = registry.add({ address: 'AA:AA:AA:AA:AA:AA', name: 'Key' });
+  const light = registry.lights.get(device.id);
+  light.state = { power: true, mode: 'hsl', brightness: 42, hue: 0, saturation: 0, cct: 5600 };
+  light.emit('state', light.snapshot());
+
+  registry.remove(device.id);
+  const after = store.writes.at(-1);
+  assert.deepEqual(after.devices, [], 'the light is gone from the saved list');
+  assert.equal(after.states[device.id], undefined, 'and so is its remembered state');
+
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  assert.deepEqual(store.writes.at(-1).devices, [], 'and it stayed removed');
+});
+
+test('a scan shuts the helper it started', async () => {
+  // Every scan builds its own transport, and `nlink.exe` only exits when its stdin
+  // closes. A scan that did not clean up left one process per click, alive until the
+  // deck was closed, holding a handle on the radio adapter the whole time.
+  const disposed = [];
+  const registry = new DeviceRegistry(
+    { save() {} },
+    {
+      createLight: (d, s) => new StubLight(d, s),
+      createTransport: () => ({
+        async scan() {
+          return [{ address: 'AA:BB:CC:DD:EE:FF', name: 'NEEWER RGB62', rssi: -50 }];
+        },
+        async dispose() {
+          disposed.push(true);
+        },
+      }),
+    }
+  );
+
+  const found = await registry.scan({ duration: 1000, onlyNeewer: true });
+
+  assert.equal(found.length, 1, 'the scan itself still works');
+  assert.equal(disposed.length, 1, 'and the helper it started was shut down');
+});
+
+test('a scan that fails still shuts its helper down', async () => {
+  // Otherwise the failures are the ones that leak: a radio that is off, or a fixture
+  // that refuses, is exactly when the user retries.
+  const disposed = [];
+  const registry = new DeviceRegistry(
+    { save() {} },
+    {
+      createLight: (d, s) => new StubLight(d, s),
+      createTransport: () => ({
+        async scan() {
+          throw new Error('radio is off');
+        },
+        async dispose() {
+          disposed.push(true);
+        },
+      }),
+    }
+  );
+
+  await assert.rejects(registry.scan({ duration: 1000 }), /radio is off/);
+  assert.equal(disposed.length, 1, 'the helper was shut down even though the scan failed');
+});
+
+test('a scan never borrows a fixture transport', async () => {
+  // Discovery is adapter-wide. If it reused a fixture's transport, disposing it after the
+  // scan would drop that fixture's link, and every Scan press would unlink a lamp.
+  const scanned = { id: 'scan-transport', disposed: false };
+  const registry = new DeviceRegistry(
+    { save() {} },
+    {
+      createLight: (d, s) => {
+        const light = new StubLight(d, s);
+        light.transport = { id: 'fixture-transport' };
+        return light;
+      },
+      createTransport: () => ({
+        id: scanned.id,
+        async scan() {
+          return [];
+        },
+        async dispose() {
+          scanned.disposed = true;
+        },
+      }),
+    }
+  );
+
+  const device = registry.add({ address: 'AA:AA:AA:AA:AA:AA', name: 'Key' });
+  const fixture = registry.lights.get(device.id).transport;
+  await registry.scan({ duration: 1000 });
+
+  assert.notEqual(fixture.id, scanned.id, 'the scan had a transport of its own');
+  assert.equal(scanned.disposed, true, 'the scan transport was the one disposed');
+  assert.equal(fixture.id, 'fixture-transport', 'the fixture link was left alone');
+});
+
 test('registers an unlimited number of devices', () => {
   const { registry } = makeRegistry();
   for (let i = 0; i < 12; i += 1) {

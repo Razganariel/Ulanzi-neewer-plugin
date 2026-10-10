@@ -10,10 +10,10 @@
  * it walks the presets directly rather than relying on a key press.
  */
 
-import { ACTION, LIMITS, STATE } from '../core/constants.js';
+import { ACTION, LIMITS } from '../core/constants.js';
 import { rotateSteps, walkList } from '../core/dial.js';
 import { clamp, dialStep } from '../core/params.js';
-import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
+import { setEncoderText, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.HUE;
 
@@ -25,13 +25,12 @@ export const defaults = {
 };
 
 /** Hue goes 0-359 so that a full turn lands back on 0 instead of 360. */
-const MAX = LIMITS.HUE_MAX - 1;
+const MAX = LIMITS.HUE.max - 1;
 
 export function render({ $UD, context, snap, isEncoder }) {
   const value = `${snap.hue}`;
   if (isEncoder) setEncoderText($UD, context, value, 'HUE');
-  setStateIcon($UD, context, STATE.DEFAULT, value);
-  setTitle($UD, context, `hue ${value}`);
+  setTitle($UD, context, value);
 }
 
 /**
@@ -48,11 +47,11 @@ export function parseHuePresets(raw) {
     const trimmed = part.trim();
     if (trimmed === '') continue;
     const [hue, saturation] = trimmed.split(':');
-    const h = clamp(hue, LIMITS.HUE_MIN, MAX, null);
+    const h = clamp(hue, LIMITS.HUE.min, MAX, null);
     if (h === null) continue;
     const s = saturation === undefined || saturation.trim() === ''
       ? null
-      : clamp(saturation, LIMITS.SATURATION_MIN, LIMITS.SATURATION_MAX, null);
+      : clamp(saturation, LIMITS.SATURATION.min, LIMITS.SATURATION.max, null);
     out.push({ hue: h, saturation: s });
   }
   return out;

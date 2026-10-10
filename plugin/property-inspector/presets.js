@@ -72,8 +72,14 @@
     const addButton = document.getElementById('preset-add');
     const hasThird = Boolean(spec.third);
     const hasNames = spec.names ?? hasThird;
-    /** What this panel last sent, so the host echo does not rebuild the rows. */
-    let emitted = null;
+    /**
+     * The stored list the rows on screen were built from.
+     *
+     * `null` until the first draw, so the opening settings always build the rows. After
+     * that it is what makes an echo a no-op: any settings message carrying the same list
+     * is describing the rows that are already there.
+     */
+    let drawn = null;
 
     /**
      * Builds one editable row.
@@ -86,7 +92,6 @@
       const tr = cell('tr', 'preset-row');
 
       const number = cell('td', 'pick');
-      number.dataset.index = String(index);
       tr.appendChild(number);
 
       for (const field of hasNames ? ['name', 'value', 'third'] : ['value']) {
@@ -103,7 +108,9 @@
 
       const actions = cell('td', 'actions');
       actions.appendChild(iconButton('Save this preset', SAVE_ICON, () => save()));
-      actions.appendChild(iconButton('Delete this preset', DELETE_ICON, () => remove(index)));
+      // The row itself, not its position: deleting one row moves every row after it, so
+      // an index captured when the row was built goes stale the moment the list changes.
+      actions.appendChild(iconButton('Delete this preset', DELETE_ICON, () => remove(tr)));
       tr.appendChild(actions);
       return tr;
     }
@@ -169,10 +176,22 @@
       if (inputs[0]) inputs[0].focus();
     }
 
-    function remove(index) {
-      const tr = rows()[index];
+    /**
+     * Deletes one row and saves what is left.
+     *
+     * Takes the row rather than its position: every row after the deleted one moves up,
+     * and a position captured when the button was built would then point at the wrong row,
+     * or at nothing at all. That is not hypothetical - it is what made the second preset
+     * of a pair refuse to delete.
+     *
+     * @param {object} tr the row to remove
+     */
+    function remove(tr) {
       if (!tr) return;
       tr.remove();
+      // Same invariant `draw` keeps: there is always one empty row to type into. Without
+      // it, deleting the last preset leaves a table with nowhere to type.
+      if (!rows().length) body.appendChild(row(0, blankRow()));
       renumber();
       clearStatus();
       save();
@@ -249,23 +268,15 @@
         names.push(entry.name || `${spec.value.name || 'Scene'} ${index + 1}`);
       });
       const presets = packed.join(',');
-      // Recorded before sending: the echo that follows must not rebuild the rows.
-      emitted = presets;
       clearStatus();
-      const settings = { ...withoutRowFields(PI.read()), presets };
+      // The rows already show exactly this, so the echo that follows is describing what is
+      // on screen. Saying so keeps `render` from rebuilding them under the caret.
+      drawn = presets;
+      const settings = { ...PI.withoutRowFields(PI.read()), presets };
       // A single value list has nowhere to show a name, so it does not get one stored.
       if (hasNames) settings.presetNames = names.join(',');
       PI.push(settings);
       return true;
-    }
-
-    /** Strips the per-row inputs so they are never persisted as settings of their own. */
-    function withoutRowFields(settings) {
-      const out = { ...settings };
-      for (const key of Object.keys(out)) {
-        if (/^p\d+_(name|value|third)$/.test(key)) delete out[key];
-      }
-      return out;
     }
 
     function label(tr) {
@@ -273,11 +284,17 @@
       return `Preset ${n + 1}`;
     }
 
-    /** Rebuilds the rows from the stored string, unless this panel wrote it. */
+    /** Rebuilds the rows only when the stored list really changed. */
     function render(settings) {
       const stored = String(settings.presets ?? '');
-      if (emitted !== null && stored === emitted) return;
-      emitted = null;
+      // Every settings message redraws the form, and the host echoes one back after any
+      // unrelated edit - changing the device, the step, the bounds. Rebuilding on those
+      // threw away whatever the user had typed into the rows without saving it, which is
+      // the opposite of what a panel with an explicit Save button should do. The stored
+      // string is what the rows were last built from, so an echo that says the same
+      // thing changes nothing and is ignored.
+      if (drawn !== null && stored === drawn) return;
+      drawn = stored;
       clearStatus();
       const names = String(settings.presetNames ?? '')
         .split(',')

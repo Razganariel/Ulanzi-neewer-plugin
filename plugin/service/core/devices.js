@@ -49,6 +49,9 @@ export class DeviceRegistry extends EventEmitter {
     // Injected so the registry can be exercised without a radio: a stub light
     // keeps the wiring testable while the real one owns the BLE link.
     this._create = options.createLight || ((device, state) => new NeewerLight(device, state));
+    // Injected for the same reason as createLight: a scan owns a helper process, and a
+    // test has to be able to see that it is shut down again.
+    this._createTransport = options.createTransport || (() => new NeewerTransport());
     /** @type {Map<string, {id:string,address:string,name:string}>} */
     this.devices = new Map();
     /** @type {Map<string, NeewerLight>} */
@@ -107,8 +110,17 @@ export class DeviceRegistry extends EventEmitter {
    *
    * @param {{duration?:number, onlyNeewer?:boolean}} opts
    */
-  scan(opts) {
-    return new NeewerTransport().scan(opts);
+  async scan(opts) {
+    const transport = this._createTransport();
+    // The helper outlives the link it was opened for: it only exits when its stdin
+    // closes. Without this, every scan left a process behind for the whole session.
+    // `finally` returns a promise, so the helper is really gone before the caller
+    // continues, and a failed scan still cleans up after itself.
+    try {
+      return await transport.scan(opts);
+    } finally {
+      await transport.dispose();
+    }
   }
 
   /**
@@ -150,6 +162,9 @@ export class DeviceRegistry extends EventEmitter {
     this.devices.delete(id);
     this.states.delete(id);
     if (this.activeId === id) this.activeId = [...this.devices.keys()][0] || '';
+    // Written here rather than left to the debounce: this save is what makes the removal
+    // durable, and it reads the registry as it stands now, so a pending timer firing
+    // later can only rewrite the same thing.
     this._persist();
     this.emit('change', {});
     return true;
@@ -228,7 +243,19 @@ export class DeviceRegistry extends EventEmitter {
   }
 
   stopAll() {
+    // Flush before anything else. The debounced write is unref'd, so it would never
+    // run once the host exits the process: closing UlanziDeck within a second of a
+    // command would drop that command, and the next start would show a stale dial.
+    this.flush();
     for (const light of this.lights.values()) light.stop();
+  }
+
+  /** Writes any pending belief to the settings now, and cancels the timer. */
+  flush() {
+    if (!this._persistTimer) return;
+    clearTimeout(this._persistTimer);
+    this._persistTimer = null;
+    this._persist();
   }
 
   _persist() {

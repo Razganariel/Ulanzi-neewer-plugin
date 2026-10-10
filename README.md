@@ -45,6 +45,8 @@ Protocole BLE Neewer « `0x78` », documenté publiquement (reverse engineering 
 
 Il n'existe pas de trame « luminosité seule » : un changement de luminosité renvoie la trame du mode courant (HSL ou CCT), comme le fait l'app.
 
+La température voyage en **un octet de 100 K** : la lampe ne connaît que les multiples de 100 K, et 2550 K n'existe pas. Un pas de molette ou de touche doit donc être un multiple de 100 — 250 K ne l'est pas, et ajouter 250 à 2500 donne 2750, que la trame arrondit : la lampe atterrit ailleurs que là où la molette l'annonçait. Les pas proposés sont 100, 200, 500 et 1000 K, et un réglage plus fin enregistré par erreur retombe sur 200 K plutôt que d'arrondir en silence.
+
 ## 3. Prérequis
 
 - **Windows 10 build 15063+** ( Creators Update )
@@ -123,11 +125,10 @@ Lancer UlanziStudio avec les flags de debug (clic droit sur le raccourci → Pro
 "C:\...\Ulanzi Studio.exe" --log --webRemoteDebug --nodeRemoteDebug
 ```
 
-- **Log du service principal** : `%AppData%\Ulanzi\UlanziStudio\logs\com.ulanzi.ulanzistudio.neewer.log` (le nom du fichier est l'UUID du service principal)
+- **Log du service principal** : `%AppData%\Ulanzi\UlanziStudio\logs\com.ulanzi.ulanzistudio.neewer.log` (le nom du fichier est l'UUID du service principal). L'hôte n'en conserve que les appels de niveau `error` : les messages `info` restent visibles dans la console du processus.
 - **Inspecteurs de propriétés** : `http://localhost:9292` liste tous les WebView HTML chargés
 - **Service Node** : `manifest.json` contient déjà `"Inspect": "--inspect=127.0.0.1:9212"` ; ouvrir `chrome://inspect` dans Chrome et ajouter la cible `127.0.0.1:9212`
-- **Trames BLE** : chaque trame émise est tracée dans le log, ex. `tx 78860458011864D7`
-- **Trace complète** : `%AppData%\Ulanzi\UlanziDeck\logs\com.ulanzi.ulanzistudio.neewer.trace.log`, chaque trame websocket dans les deux sens. Le fichier tourne à 8 Mo puis est mis en rotation (2 générations conservées) : sans plafond, une longue session produit un gigaoctet de bruit.
+- **Aucune trace des trames** : ni websocket ni BLE. Une commande partie sans réponse n'apparaît donc nulle part, et un clic sans effet est indistinguable d'un hôte qui n'a rien envoyé. C'est un choix : la trace écrivait en continu sur le disque pour une.session normale, et ce qui apportait ne justifiait pas ce coût.
 - **Transport natif indisponible** : si `nlink.exe` est absent ou refuse de démarrer, le message d'erreur explicite apparaît dans le log et nomme le chemin attendu. Vérifier la présence de `native/nlink.exe` dans le dossier du plugin et la build Windows.
 - **Aucun contrôle de l'état de la radio avant le scan** : `nlink.exe` ne teste pas l'adaptateur, il tente le scan. Un scan vide signifie « rien vu pendant la fenêtre », pas forcément « radio éteinte ».
 
@@ -158,7 +159,7 @@ Les notifications `0x81` (marche/arrêt) n'arrivent qu'en **réponse à une comm
 
 ### Autres limites
 
-- **Le transport est natif.** `noble` ne parvenait pas à découvrir les caractéristiques de la RGB62 alors que WinRT énumérait les mêmes services et caractéristiques sans difficulté. La cause était la couche noble, pas la lampe ni Windows. `nlink.exe` (C++/WinRT) prend désormais le relais ; les 8 trames du protocole ont été validées physiquement par ce chemin. Voir `docs/session-2026-09-28-bluetooth.md`.
+- **Le transport est natif.** `noble` ne parvenait pas à découvrir les caractéristiques de la RGB62 alors que WinRT énumérait les mêmes services et caractéristiques sans difficulté. La cause était la couche noble, pas la lampe ni Windows. `nlink.exe` (C++/WinRT) prend désormais le relais ; les trames du protocole ont été validées physiquement par ce chemin. Voir `docs/session-2026-09-28-bluetooth.md`.
 - **L'appairage Windows est requis.** Contrepartie directe du passage à `FromBluetoothAddressAsync` : la lampe doit être connue de l'OS. C'est la seule limite introduite par ce transport.
 - La **validation multi-appareils reste à faire** : l'architecture est en place (un lien, une file d'écriture et un état mémorisé par lampe), mais une seule RGB62 a été testée.
 - Les **effets FX** (Cop Car, Candlelight, Hue Loop…) ne sont pas exposés : les trames longues correspondantes n'ont pas été vérifiées sur la RGB62. Le module `protocol.js` a la place pour les ajouter (`OP.EFFECT`).
@@ -187,17 +188,30 @@ plugin/                             source du plugin
         ble.js                        transport natif : scan, connexion, écriture, notifications
         light.js                      session d'une lampe : état + superviseur de reconnexion
         devices.js                    registre des lampes (liste ouverte) + scan partagé
+        context.js                    contextes hôte : création, déplacement, oubli
+        settings.js                   forme des réglages globaux écrits chez l'hôte
+        shutdown.js                   écriture de la dernière commande à la sortie
         ui.js                         setStateIcon / setFeedback tolérants aux anciennes versions
     actions/                        un module par action (render / onRun / onDialRotate)
   property-inspector/
     shared.js, shared.css           bootstrap commun des pages, sélecteur de lampe
     <action>/inspector.html         une page + un script par action
+  property-inspector/
+    shared.js, shared.css           bootstrap commun des pages, sélecteur de lampe
+    stepper.js                      inspecteur commun aux boutons « un cran »
+    presets.js                      inspecteur commun aux listes de presets
 scripts/
   install-sdk.mjs                   télécharge les SDK officiels (sans git)
   build.mjs                         assemblage + validation + npm install
-tests/protocol.test.js              tests unitaires sur les octets
-tests/deps.test.js                  résolveur semver npm-free
-tests/devices.test.js               registre multi-lampes (avec light stub, sans radio)
+tests/protocol.test.js              les octets des trames, et leur checksum
+tests/params.test.js               clamps, pas de molette, listes, bornes
+tests/dials.test.js                ce que chaque molette écrit, rotation et pression
+tests/render.test.js               ce que chaque touche dessine, et le routage
+tests/light.test.js                une session de lampe, sans radio ni navigateur
+tests/devices.test.js              registre multi-lampes et état mémorisé (light stub)
+tests/presets.test.js              l'éditeur de lignes, sans navigateur
+tests/context.test.js              résolution des contextes hôte
+tests/deps.test.js                 résolveur semver npm-free
 
 sdk/                                généré : ulanzi-api/, common-html/
 release/                            généré : com.ulanzi.ulanzistudio.neewer.ulanziPlugin/

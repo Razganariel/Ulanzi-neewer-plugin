@@ -10,11 +10,13 @@
 
 import { readFileSync } from 'node:fs';
 import UlanziApi from '../ulanzi-api/index.js';
-import { PLUGIN_UUID, REPAINT_DELAY_MS } from './core/constants.js';
+import { DEFAULTS, PLUGIN_UUID, REPAINT_DELAY_MS } from './core/constants.js';
 import { DeviceRegistry } from './core/devices.js';
 import { findByUuid } from './actions/index.js';
 import { decodeContext, ensureEntry, forget, forgetActionId } from './core/context.js';
-import { trace, tracePath } from './core/trace.js';
+import { buildSettings, emptySettings } from './core/settings.js';
+import { installShutdownHandlers } from './core/shutdown.js';
+import { forgetEncoderLayout, forgetStateIcon } from './core/ui.js';
 
 const $UD = new UlanziApi();
 
@@ -29,7 +31,6 @@ const log = (msg, level = 'info') => {
   } catch {
     /* logging is best effort */
   }
-  trace('LOG ', `${level} ${msg}`);
   process.stdout.write(`[neewer] ${msg}\n`);
 };
 
@@ -80,16 +81,14 @@ function isEncoderContext(context, entry) {
  * `states` is the last commanded state per fixture, kept because the fixtures cannot
  * be read: they have no read command, and the one frame they volunteer carries a
  * constant. Without it the deck would come back claiming a brightness nobody chose.
+ *
+ * The rules live in core/settings.js so they can be tested; this only hands them to the
+ * host.
  */
-const globalSettings = { devices: [], activeId: '', address: '', name: '', states: {} };
+const globalSettings = emptySettings();
 
 function saveDevices(devices, activeId, states) {
-  globalSettings.devices = devices;
-  globalSettings.activeId = activeId;
-  globalSettings.states = states || {};
-  const active = devices.find((device) => device.id === activeId) || devices[0] || null;
-  globalSettings.address = active?.address || '';
-  globalSettings.name = active?.name || '';
+  Object.assign(globalSettings, buildSettings(devices, activeId, states));
   try {
     $UD.setGlobalSettings({ ...globalSettings });
   } catch (err) {
@@ -114,6 +113,30 @@ function boundLight(context) {
   return registry.lightFor(boundDeviceId(context));
 }
 
+/**
+ * The snapshot an action reads when no fixture is bound to it.
+ *
+ * It has the same shape as `NeewerLight.snapshot`, including the level fields. Hand-built
+ * without them, a key with no light rendered the literal text "undefined": the value was
+ * read off an object that had never carried one. Defaults are also the honest answer
+ * here - they are what a light shows before anything has ever been commanded to it.
+ */
+function emptySnapshot() {
+  return {
+    address: '',
+    name: '',
+    connected: false,
+    connecting: false,
+    lastError: '',
+    power: DEFAULTS.POWER,
+    mode: DEFAULTS.MODE,
+    brightness: DEFAULTS.BRIGHTNESS,
+    hue: DEFAULTS.HUE,
+    saturation: DEFAULTS.SATURATION,
+    cct: DEFAULTS.CCT,
+  };
+}
+
 function handlerContext(context, isEncoder) {
   const entry = contexts.get(context);
   const action = entry?.action;
@@ -126,7 +149,7 @@ function handlerContext(context, isEncoder) {
     registry,
     light,
     deviceId: boundDeviceId(context),
-    snap: light ? light.snapshot() : { address: '', name: '', connected: false, connecting: false, lastError: '' },
+    snap: light ? light.snapshot() : emptySnapshot(),
     isEncoder,
     devices: scans.get(context) || [],
     report: (err) => report(err, context),
@@ -272,27 +295,6 @@ const persisted = readHostGlobalSettings();
 
 $UD.connect(PLUGIN_UUID);
 
-// The host only persists error-level logMessage calls, so a silent session is
-// indistinguishable from a dead one. Mirror every frame in both directions to a
-// file we own: that is what makes a live click observable.
-trace('SYS ', `trace file: ${tracePath || '(unavailable)'}`);
-try {
-  const ws = $UD.websocket;
-  const onMessage = ws.onmessage;
-  const onSend = ws.send;
-  ws.onmessage = (evt) => {
-    trace('IN  ', evt?.data);
-    return onMessage.call(ws, evt);
-  };
-  ws.send = (data) => {
-    trace('OUT ', data);
-    return onSend.call(ws, data);
-  };
-  trace('SYS ', 'websocket frames traced');
-} catch (err) {
-  log(`cannot install websocket trace: ${err.message}`, 'warn');
-}
-
 $UD.onConnected(() => {
   log('main service connected to UlanziStudio');
   if (!registry.devices.size) {
@@ -307,7 +309,6 @@ $UD.onClose(() => log('websocket closed', 'warn'));
 $UD.onError((err) => log(`websocket error: ${err}`, 'error'));
 
 $UD.onDidReceiveGlobalSettings((message) => {
-  trace('GLOB', message);
   // The host shape is not documented: accept the settings nested under
   // "settings", under "payload", or spread at the root of the frame.
   const settings = message?.settings || message?.payload || message || {};
@@ -328,6 +329,10 @@ $UD.onAdd((message) => {
   const context = message.context;
   // Only `add` tells us whether the instance landed on a button or on the dial.
   if (message.controller) controllers.set(context, message.controller);
+  // A key the host has just mounted has none of our drawing on it, whatever the previous
+  // instance of this context had, so the next repaint sends its layout and its icon again.
+  forgetEncoderLayout(context);
+  forgetStateIcon(context);
   const { entry, created } = ensureEntry(contexts, context, message, (uuid) => findByUuid(uuid));
   if (!entry) return;
   // Re-acquiring a context after a removal may not ship with the full settings,
@@ -338,30 +343,37 @@ $UD.onAdd((message) => {
   scheduleRefresh(context);
 });
 
-$UD.onDidReceiveSettings((message) => {
+/**
+ * Applies settings the host sent for one context.
+ *
+ * Two events carry them and they mean the same thing: the settings of a panel, and the
+ * `paramfromapp` the host sends right after a move, once the property inspector has
+ * hydrated. Only the first is echoed back to the panel.
+ *
+ * `ensureEntry` merges: the action defaults, then whatever the instance was already
+ * carrying, then what just arrived. Rebuilding the settings from the defaults and the
+ * message instead - as this used to - reset everything the message left out, so saving a
+ * preset list put the dial's own step back to its default and editing that step emptied
+ * the presets.
+ *
+ * @param {object} message host frame
+ * @param {object} settings `message.settings` or `message.param`
+ * @param {boolean} echo whether to push the result back to the panel
+ */
+function applyHostSettings(message, settings, echo) {
   const context = message.context;
-  const { entry } = ensureEntry(contexts, context, { uuid: message.uuid, param: message.settings }, (uuid) => findByUuid(uuid));
+  const { entry } = ensureEntry(contexts, context, { uuid: message.uuid, param: settings }, (uuid) => findByUuid(uuid));
   if (!entry) return;
-  // Same instance on a key we did not know about yet: the settings arrived
-  // before any add, so treat it as a placement and draw the key.
+  // The ghost of the key this action used to sit on has to go, whether the settings
+  // arrived as a placement on a key we had never seen or after a move.
   forgetActionId(contexts, decodeContext(context).actionid, context);
-  entry.settings = { ...entry.action.defaults, ...(message.settings || {}) };
-  $UD.sendParamFromPlugin(entry.settings, context);
+  if (echo) $UD.sendParamFromPlugin(entry.settings, context);
   refresh(context);
-});
+}
 
-$UD.onParamFromApp((message) => {
-  const context = message.context;
-  const { entry, created } = ensureEntry(contexts, context, { uuid: message.uuid, param: message.param }, (uuid) => findByUuid(uuid));
-  if (!entry) return;
-  // paramfromapp is what the host sends right after a move, once the property
-  // inspector hydrates. It carries no add, so the ghost of the previous key is
-  // still registered here and has to go.
-  const ghosts = forgetActionId(contexts, decodeContext(context).actionid, context);
-  if (ghosts) trace('EVT ', `action moved, dropped ${ghosts} stale context(s) for ${decodeContext(context).actionid}`);
-  entry.settings = { ...entry.action.defaults, ...(message.param || {}) };
-  refresh(context);
-});
+$UD.onDidReceiveSettings((message) => applyHostSettings(message, message.settings, true));
+
+$UD.onParamFromApp((message) => applyHostSettings(message, message.param, false));
 
 $UD.onClear((message) => {
   // The host sends an array of {context} items; a single-context shape is also
@@ -373,6 +385,9 @@ $UD.onClear((message) => {
     // Dropping the remembered controller with the entry avoids a stale "Encoder"
     // driving setFeedback onto a button.
     controllers.delete(item.context);
+    // The host rebuilds the key, so whatever was drawn on it is gone with it.
+    forgetEncoderLayout(item.context);
+    forgetStateIcon(item.context);
     forget(contexts, item.context);
   }
 });
@@ -389,7 +404,6 @@ $UD.onClear((message) => {
 function contextFor(context, message) {
   const { entry, created } = ensureEntry(contexts, context, message, (uuid) => findByUuid(uuid));
   if (created) {
-    trace('EVT ', `recovered context ${context} -> ${entry.action.uuid}`);
     // A recovered context has never been drawn, and the host will not ask again.
     refresh(context);
   }
@@ -410,14 +424,13 @@ $UD.onSetActive((message) => {
   if (message.controller) controllers.set(context, message.controller);
   const { entry, created } = ensureEntry(contexts, context, message, (uuid) => findByUuid(uuid));
   if (!entry) return;
-  const { key, actionid } = decodeContext(context);
+  const { actionid } = decodeContext(context);
   // Drop the controller of the key it left as well, or a later re-add there keeps
   // believing it sits on the control it had before the move.
   for (const [other, otherEntry] of contexts) {
     if (other !== context && decodeContext(other).actionid === actionid) controllers.delete(other);
   }
-  const ghosts = forgetActionId(contexts, actionid, context);
-  if (ghosts) trace('EVT ', `action moved to ${key}, dropped ${ghosts} stale context(s) for ${actionid}`);
+  forgetActionId(contexts, actionid, context);
   // A move is a fresh placement: the new key has never been drawn, and the host
   // will not ask again.
   refresh(context);
@@ -425,13 +438,11 @@ $UD.onSetActive((message) => {
 
 $UD.onRun((message) => {
   const ctx = contextFor(message.context, message);
-  trace('EVT ', `run ${message.context} device=${ctx.deviceId || registry.activeId || 'none'}`);
   ctx.action?.onRun?.(ctx);
 });
 
 $UD.onDialRotate((message) => {
   const ctx = contextFor(message.context, message);
-  trace('EVT ', `dialrotate ${message.context} ${message.rotateEvent || ''}`);
   ctx.action?.onDialRotate?.(ctx, message);
 });
 
@@ -439,7 +450,6 @@ $UD.onDialRotate((message) => {
 // for an encoder, so an action that only had onRun was silently inert on a dial.
 $UD.onDialUp((message) => {
   const ctx = contextFor(message.context, message);
-  trace('EVT ', `dialup ${message.context}`);
   ctx.action?.onDialPress?.(ctx);
 });
 
@@ -447,7 +457,6 @@ $UD.onDialUp((message) => {
 $UD.onSendToPlugin(async (message) => {
   const payload = message.payload || {};
   const context = message.context || `${message.uuid}___${message.key}___${message.actionid}`;
-  trace('EVT ', `sendToPlugin ${payload.event || '?'} ${JSON.stringify(payload)}`);
   // The property inspector only renders after an add, so a reopened inspector can
   // be the first frame we see for a context that already exists on the deck.
   ensureEntry(contexts, context, message, (uuid) => findByUuid(uuid));
@@ -538,10 +547,6 @@ process.on('uncaughtException', (err) => {
   log(`uncaught: ${err && err.stack ? err.stack : err}`, 'error');
 });
 
-process.on('SIGINT', () => {
-  registry.stopAll();
-  process.exit(0);
-});
+installShutdownHandlers(registry);
 
 log('Neewer plugin main service started');
-export { $UD, registry };

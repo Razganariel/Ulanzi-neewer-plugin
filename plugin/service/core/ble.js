@@ -149,6 +149,29 @@ export class NeewerTransport extends EventEmitter {
       }
     }
   }
+
+  /**
+   * Shuts the helper down for good, where `disconnect` only closes the BLE link.
+   *
+   * `nlink.exe` exits when its stdin closes and at no other signal, so a transport that
+   * is merely disconnected keeps its process alive for the rest of the session. Every
+   * scan builds a throwaway transport, which made one orphaned helper per scan, and a
+   * removed light took its own with it.
+   *
+   * The link is forgotten rather than kept, so a transport that is disposed and then
+   * used again starts a fresh helper instead of talking to a dead one.
+   */
+  async dispose() {
+    await this.disconnect();
+    const link = this.link;
+    this.link = null;
+    if (!link) return;
+    try {
+      await link.stop();
+    } catch {
+      /* the helper is going away regardless */
+    }
+  }
 }
 
 export function sleep(ms) {

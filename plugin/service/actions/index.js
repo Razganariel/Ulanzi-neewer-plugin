@@ -37,7 +37,6 @@ const MODULES = [
   cctUp,
   cctDown,
   scan,
-
 ];
 
 export const registry = new Map();

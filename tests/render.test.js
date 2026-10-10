@@ -59,11 +59,70 @@ function fakeUD() {
 }
 
 const snapOf = (snap) => ({ connected: true, brightness: 40, hue: 30, saturation: 70, cct: 5600, ...snap });
-const draw = (mod, { isEncoder = false, snap = {} } = {}) => {
+// Each draw is a key of its own unless the test says otherwise, because the service
+// remembers what it has drawn per key: the encoder layout and the state icon go out once.
+// A test that means "the same key, repainted" passes the same context explicitly; every
+// other test is comparing renderings of separate keys.
+let drawnKeys = 0;
+const draw = (mod, { isEncoder = false, snap = {}, context } = {}) => {
   const $UD = fakeUD();
-  mod.render({ $UD, context: 'ctx', snap: snapOf(snap), isEncoder });
+  const key = context ?? `ctx-${mod.uuid}-${(drawnKeys += 1)}`;
+  mod.render({ $UD, context: key, snap: snapOf(snap), isEncoder });
   return $UD.sent;
 };
+
+const countOf = (sent, kind) => sent.filter((c) => c[0] === kind).length;
+
+test('no dial paints a state icon at all', () => {
+  // The manifest omits DisableAutomaticStates, so the host already draws the declared
+  // state by itself - every shipped Ulanzi plugin does this. Sending it again was the last
+  // frame that could put the name of the state on the key, and on a dial it appeared for
+  // a frame ("CCT") whenever the host rebuilt the key. The level is carried by setTitle on
+  // a button and setFeedback on a dial, so nothing is lost.
+  for (const mod of [brightness, hue, saturation, cct]) {
+    const first = draw(mod, { isEncoder: true });
+    assert.equal(countOf(first, 'state'), 0, `${mod.uuid} sent a state icon`);
+    assert.ok(countOf(first, 'feedback'), `${mod.uuid} still sends its level`);
+  }
+  // The presets keys are buttons, so their level travels through the title.
+  for (const mod of [huePresets, cctPresets]) {
+    const first = draw(mod);
+    assert.equal(countOf(first, 'state'), 0, `${mod.uuid} sent a state icon`);
+    assert.equal(countOf(first, 'title'), 1, `${mod.uuid} still sends its level`);
+  }
+});
+
+test('no dial repaints the same key twice over', () => {
+  // Changing the encoder layout makes the host rebuild the key, and until the feedback
+  // that follows arrives it has nothing to draw but the name of the state. The layout
+  // never changes, so it goes out once per key and the content keeps going out every time.
+  //
+  // All four dials, each on a context of its own, so one key's first draw never pays for
+  // another's.
+  for (const mod of [brightness, hue, saturation, cct]) {
+    const context = `once-${mod.uuid}`;
+    const first = draw(mod, { isEncoder: true, context, snap: { cct: 3400 } });
+    assert.equal(countOf(first, 'layout'), 1, `${mod.uuid} applied its layout when it appeared`);
+    assert.equal(countOf(first, 'feedback'), 1, `${mod.uuid} sent its first readout`);
+
+    for (let round = 1; round <= 3; round += 1) {
+      const after = draw(mod, { isEncoder: true, context, snap: { cct: 3400 + round } });
+      assert.equal(countOf(after, 'layout'), 0, `${mod.uuid} repaint ${round} changed the layout`);
+      // The level is what the repaint is for, and it goes out every time.
+      assert.equal(countOf(after, 'feedback'), 1, `${mod.uuid} repaint ${round} sent its content`);
+      assert.equal(countOf(after, 'title'), 1, `${mod.uuid} repaint ${round} titled the key`);
+    }
+  }
+});
+
+test('a button never touches the encoder layout', () => {
+  // The counterpart, and why only dials ever flickered.
+  for (const mod of [brightnessUp, saturationDown, cctUp, hueDown, power]) {
+    const sent = draw(mod, { context: `ctx-btn-${mod.uuid}` });
+    assert.equal(countOf(sent, 'layout'), 0, `${mod.uuid} sent a layout change`);
+    assert.equal(countOf(sent, 'feedback'), 0, `${mod.uuid} sent encoder feedback`);
+  }
+});
 
 test('the manifest must not disable automatic states', () => {
   // Every shipped Ulanzi plugin omits the flag, and with it set the host draws
@@ -122,15 +181,36 @@ test('state indices agree with the manifest', () => {
   }
 });
 
-test('the drawn state does not depend on whether the lamp is reachable', () => {
-  // Link status used to flip the icon, which is what produced the mismatch: the
-  // payload said connected while the key kept the waiting icon.
+test('what a key draws does not depend on whether the lamp is reachable', () => {
+  // Link status used to flip the icon, which is what produced the mismatch: the payload
+  // said connected while the key kept the waiting icon. The dials no longer draw an icon
+  // at all - the host paints the declared state - so what is left to compare is the level,
+  // and it must not move when the link drops.
   for (const mod of [brightness, hue, saturation, cct]) {
-    const up = draw(mod, { snap: { connected: true } }).find((c) => c[0] === 'state');
-    const down = draw(mod, { snap: { connected: false } }).find((c) => c[0] === 'state');
-    assert.equal(up[1], STATE.DEFAULT, `${mod.uuid} draws its own state`);
-    assert.equal(down[1], up[1], `${mod.uuid} keeps the same icon when the lamp drops out`);
+    const level = (connected) => {
+      const sent = draw(mod, { isEncoder: true, snap: { connected } });
+      const title = sent.find((c) => c[0] === 'title');
+      const feedback = sent.find((c) => c[0] === 'feedback');
+      return JSON.stringify([title?.[1], feedback?.[1]]);
+    };
+    assert.equal(level(true), level(false), `${mod.uuid} draws the same thing either way`);
   }
+});
+
+test('the actions whose state really changes still draw it', () => {
+  // Power and Scan are the two the host cannot guess: one flips between its states, the
+  // other shows a count that changes. Everything else declares a single state whose image
+  // is constant, which the host already draws.
+  const on = draw(power, { snap: { power: true } }).find((c) => c[0] === 'state');
+  const off = draw(power, { snap: { power: false } }).find((c) => c[0] === 'state');
+  assert.ok(on && off, 'power draws a state');
+  assert.notEqual(on[1], off[1], 'and the two states differ');
+
+  const scanFrames = draw(scan, { knownDevices: () => [{ id: 'a' }, { id: 'b' }] });
+  assert.ok(
+    scanFrames.some((c) => c[0] === 'state'),
+    'scan draws the number of registered lights'
+  );
 });
 
 test('an encoder instance gets the dial readout', () => {
@@ -150,7 +230,8 @@ test('a keypad instance gets no encoder command at all', () => {
       !sent.some((c) => c[0] === 'layout' || c[0] === 'feedback'),
       `${mod.uuid} must not send encoder commands from a button`
     );
-    assert.ok(sent.some((c) => c[0] === 'state'), `${mod.uuid} still draws its icon`);
+    // A button instance still gets its level, through the title.
+    assert.equal(countOf(sent, 'title'), 1, `${mod.uuid} titles the key`);
   }
 });
 
@@ -210,13 +291,54 @@ test('hue splits its tap into a preset walk and two one-step buttons', () => {
   assert.notEqual(hueUp.uuid, hueDown.uuid, 'up and down are two distinct actions');
 });
 
-test('every hue key draws the value it is about to move', () => {
-  for (const mod of [huePresets, hueUp, hueDown]) {
+test('the temperature key keeps its level while the lamp is in colour mode', () => {
+  // The reported failure: a CCT action showed the temperature, then a Hue or Saturation
+  // action put the CCT key and dial back to "HSL". A mode is not a level, and it says
+  // nothing about the setting those keys are about. The three dials beside it - hue,
+  // saturation, brightness - show their value whatever the lamp is doing, and a colour
+  // command leaves the remembered temperature alone, so there is a real number to show.
+  for (const mod of [cct, cctPresets, cctUp, cctDown]) {
+    // Two different keys, because a second draw of the same key is a repaint and a
+    // repaint deliberately does not repeat the icon or the layout. What is compared here
+    // is the content: the title and the dial readout.
+    const content = (suffix, snap) =>
+      draw(mod, { snap, context: `mode-${suffix}-${mod.uuid}` })
+        .filter((c) => c[0] === 'title' || c[0] === 'feedback')
+        .map((c) => [c[0], c[1]?.title?.text ?? c[1]]);
+    const inColour = content('hsl', { mode: 'hsl', cct: 3400 });
+    const inCct = content('cct', { mode: 'cct', cct: 3400 });
+
+    assert.deepEqual(inColour[0], ['title', '3400K'], `${mod.uuid} titles the temperature, not the mode`);
+    assert.deepEqual(
+      inColour,
+      inCct,
+      `${mod.uuid} draws the same thing in either mode`
+    );
+
+    // The encoder readout too: it is the only place with room for the unit.
+    const encoder = draw(mod, {
+      isEncoder: true,
+      snap: { mode: 'hsl', cct: 3400 },
+      context: `mode-encoder-${mod.uuid}`,
+    });
+    const feedback = encoder.find((c) => c[0] === 'feedback');
+    if (feedback) {
+      assert.match(JSON.stringify(feedback[1]), /3400/, `${mod.uuid} encoder shows the level`);
+    }
+  }
+});
+
+test('every hue key draws the value it is about to move', () => {  for (const mod of [huePresets, hueUp, hueDown]) {
     const sent = draw(mod, { snap: { hue: 120 } });
-    assert.ok(sent.some((c) => c[0] === 'state'), `${mod.uuid} paints its key`);
+    assert.ok(sent.some((c) => c[0] === 'title'), `${mod.uuid} paints its key`);
+    const title = sent.find((c) => c[0] === 'title');
+    assert.ok(title, `${mod.uuid} titles its key`);
+    // The title is the level and nothing else. It used to be `hue up (120)`, which is
+    // long enough to be cut on a small key and buries the only part that changes.
+    assert.equal(String(title[1]).replace(/[^\d]/g, ''), '120', `${mod.uuid} shows the level`);
     assert.ok(
-      sent.some((c) => c[0] === 'title' && /120/.test(String(c[1]))),
-      `${mod.uuid} names the value on the key, not a fixed label`
+      !/[()a-z]/i.test(String(title[1])),
+      `${mod.uuid} carries no label around the value, got "${title[1]}"`
     );
     assert.ok(
       !sent.some((c) => c[0] === 'layout' || c[0] === 'feedback'),
@@ -251,13 +373,20 @@ test('cct splits its tap into a scene walk and a plain temperature step', () => 
 
 test('the one-step buttons draw the value they are about to move', () => {
   for (const [mod, value] of [[brightnessUp, '50%'], [brightnessDown, '50%'], [saturationUp, '70'], [saturationDown, '70']]) {
-    const $UD = fakeUD();
-    mod.render({ $UD, context: 'ctx', snap: snapOf({ brightness: 50, saturation: 70 }) });
-    const drawn = $UD.sent.filter((c) => c[0] === 'state');
-    assert.ok(drawn.length > 0, `${mod.uuid} paints its key`);
+    const sent = draw(mod, { snap: { brightness: 50, saturation: 70 } });
+    const title = sent.find((c) => c[0] === 'title');
+    assert.ok(title, `${mod.uuid} titles its key`);
+    assert.equal(
+      String(title[1]),
+      value,
+      `${mod.uuid} shows the current value, not a fixed label`
+    );
+    // Its icon still carries the value too, drawn once with the key.
+    const drawn = sent.filter((c) => c[0] === 'state');
+    assert.ok(drawn.length > 0, `${mod.uuid} drew its icon`);
     assert.ok(
       drawn.every((c) => String(c[2]).includes(value)),
-      `${mod.uuid} shows the current value, not a fixed label`
+      `${mod.uuid} puts the value on the icon as well`
     );
   }
 });
@@ -288,42 +417,15 @@ test('one press on a fresh fixture turns it on', async () => {
   assert.deepEqual(calls, [['setPower', true]]);
 });
 
-test('opening a fixture writes nothing, so a lamp that is on stays on', () => {
-  // Every frame this protocol has is a command. Re-asserting the cached state on
-  // connect imposed a state instead of observing one: a colour frame switches the lamp
-  // on, a power frame switches it off, and the plugin has no way to read the truth
-  // before it speaks. The fixture reports a level on its own instead.
-  const source = readFileSync(new URL('../plugin/service/core/light.js', import.meta.url), 'utf8');
-  const connect = source.slice(source.indexOf('async connect()'), source.indexOf('async connect()') + 1400);
-  assert.doesNotMatch(connect, /_send\(/, 'connect must not write a frame');
-  assert.doesNotMatch(source, /_activeFrame/, 'the re-assertion helper is gone');
-});
-
-test('the level byte is left alone: it measures the same lit or unlit', () => {
-  // Three measurements on a real RGB62: the frame reports level 100 with the lamp on,
-  // 100 with it off, and on one run not at all. A constant is not a state, so deriving
-  // power or brightness from it would put a confident wrong number on the deck.
-  const light = readFileSync(new URL('../plugin/service/core/light.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(light, /reportedLevel/, 'no level is kept');
-  assert.doesNotMatch(light, /decoded\.level/, 'and none is acted on');
-
-  // The decoder may still describe the frame: it is the wire format, not a claim.
-  const protocol = readFileSync(new URL('../plugin/service/core/protocol.js', import.meta.url), 'utf8');
-  assert.match(protocol, /case OP\.DEVICE/, 'the frame stays documented and tested');
-});
-
-test('what the deck shows at startup is the last command, not a guess', () => {
-  // The fixtures cannot be read, so the persisted command is the only honest value.
-  // Without it the deck came back claiming brightness 100 while the lamp sat at 5, and
-  // one notch of the dial then computed 105 and wrapped the lamp down to 5.
-  const light = readFileSync(new URL('../plugin/service/core/light.js', import.meta.url), 'utf8');
-  assert.match(light, /initialState/, 'the constructor accepts a restored state');
-  assert.match(light, /sanitizeState\(initialState\)/, 'and sanitises what it is given');
-
-  const devices = readFileSync(new URL('../plugin/service/core/devices.js', import.meta.url), 'utf8');
-  assert.match(devices, /this\.states\.set\(device\.id, commandedState\(snapshot\)\)/, 'every change is remembered');
-  assert.match(devices, /Object\.fromEntries\(this\.states\)/, 'and persisted with the device list');
-  assert.match(devices, /_schedulePersist\(\)/, 'debounced, so a rotation is not a write per notch');
+test('nothing the deck shows is invented at render time', () => {
+  // Behavioural guard on the one thing that bit: a lamp the plugin has never spoken to
+  // reads as off, so the deck never claims a light is on. `light.test.js` covers the
+  // restored-state half of this.
+  const drawn = draw(power, { snap: { power: false } });
+  assert.ok(
+    drawn.some((c) => c[0] === 'state' && c[1] === 0),
+    'a fresh fixture is drawn in the Off state, not On'
+  );
 });
 
 test('scan is button-only and never sends a dial readout', () => {

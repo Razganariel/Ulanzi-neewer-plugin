@@ -17,34 +17,36 @@
  * A bare "kelvin" is still accepted and keeps the current brightness.
  */
 
-import { ACTION, LIMITS, STATE } from '../core/constants.js';
-import { rotateSteps, walkList } from '../core/dial.js';
+import { ACTION, LIMITS } from '../core/constants.js';
+import { dialBounds, rotateSteps, walkList } from '../core/dial.js';
 import { bool, clamp, dialStep, wrap } from '../core/params.js';
-import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
+import { setEncoderText, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.CCT;
 
 export const defaults = {
   device: '',
-  step: 250,
-  min: LIMITS.CCT_MIN,
-  max: LIMITS.CCT_MAX,
+  step: 200,
+  min: LIMITS.CCT.min,
+  max: LIMITS.CCT.max,
   wrap: true,
   presets: '3400:28,4500:16,5000:16,5600:28,6500:100',
   presetNames: 'Candle,Sunset,Afternoon light,Sunlight,Cold blue light',
 };
 
-export function bounds(settings) {
-  const min = clamp(settings.min, LIMITS.CCT_MIN, LIMITS.CCT_MAX, defaults.min);
-  const max = clamp(settings.max, min, LIMITS.CCT_MAX, defaults.max);
-  return { min, max };
+function bounds(settings) {
+  return dialBounds(settings, LIMITS.CCT, defaults);
 }
 
 export function render({ $UD, context, snap, isEncoder }) {
-  const value = snap.mode === 'cct' ? `${snap.cct}K` : 'HSL';
+  // The temperature, whatever the lamp is currently doing. It used to show "HSL" while
+  // the lamp was in colour mode, which is a mode and not a level: the key is about the
+  // temperature, and the three dials beside it show their value whatever the mode. The
+  // command itself leaves the remembered temperature alone, so the number shown here is
+  // the one a press would move from.
+  const value = `${snap.cct}K`;
   if (isEncoder) setEncoderText($UD, context, value, 'CCT');
-  setStateIcon($UD, context, STATE.DEFAULT, value);
-  setTitle($UD, context, `${value}`);
+  setTitle($UD, context, value);
 }
 
 export async function onDialRotate(ctx, message) {
@@ -52,9 +54,11 @@ export async function onDialRotate(ctx, message) {
   const dir = rotateSteps(message);
   if (dir === 0) return;
   const { min, max } = bounds(settings);
-  // 100 K is the wire granularity: a step below it would round back onto the
-  // same frame and appear to do nothing.
-  const step = dialStep(settings.step, 100, max - min, defaults.step, [100, 200, 250, 300, 500]);
+  // 100 K is the wire granularity: the temperature travels as one byte of 100 K, so a
+  // step that is not a multiple of 100 lands between two values the protocol can carry.
+  // 250 K was offered here until now, and 2500 + 250 = 2750 is not expressible: the
+  // frame rounds it and the lamp does not land where the dial said it would.
+  const step = dialStep(settings.step, 100, max - min, defaults.step, [100, 200, 500, 1000]);
   const raw = snap.cct + dir * step;
   const next = bool(settings.wrap, defaults.wrap) ? wrap(raw, min, max) : clamp(raw, min, max, snap.cct);
   try {
@@ -82,17 +86,11 @@ export function parseScenes(raw, min, max) {
     if (k === null) continue;
     const b = brightness === undefined
       ? null
-      : clamp(brightness, LIMITS.BRIGHTNESS_MIN, LIMITS.BRIGHTNESS_MAX, null);
+      : clamp(brightness, LIMITS.BRIGHTNESS.min, LIMITS.BRIGHTNESS.max, null);
     out.push({ kelvin: k, brightness: b });
   }
   return out;
 }
-
-/** The scenes the buttons use as their default list. */
-export const PRESET_DEFAULTS = Object.freeze({
-  presets: '3400:28,4500:16,5000:16,5600:28,6500:100',
-  presetNames: 'Candle,Sunset,Afternoon light,Sunlight,Cold blue light',
-});
 
 /**
  * Walks the scene list by one, wrapping at the end. Shared by `cct-presets.js` and

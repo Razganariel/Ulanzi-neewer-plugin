@@ -15,7 +15,7 @@ import { decodeContext, ensureEntry, forget, forgetActionId, slotOf } from '../p
 const UUID = 'com.ulanzi.ulanzistudio.neewer';
 const actions = {
   [`${UUID}.hue`]: { uuid: `${UUID}.hue`, defaults: { step: 10, presets: '0,30,60' } },
-  [`${UUID}.cct`]: { uuid: `${UUID}.cct`, defaults: { step: 250, presets: '' } },
+  [`${UUID}.cct`]: { uuid: `${UUID}.cct`, defaults: { step: 200, presets: '' } },
 };
 const findAction = (uuid) => actions[uuid];
 
@@ -112,7 +112,7 @@ test('switching actions on one key discards the previous action settings', () =>
   ensureEntry(contexts, ctx('3_3', 'abc'), { uuid: `${UUID}.hue`, param: { step: 30, presets: '0,30' } }, findAction);
   const { entry } = ensureEntry(contexts, ctx('3_3', 'abc'), { uuid: `${UUID}.cct`, param: {} }, findAction);
   assert.equal(entry.action.uuid, `${UUID}.cct`);
-  assert.equal(entry.settings.step, 250, 'CCT default, not the hue 30');
+  assert.equal(entry.settings.step, 200, 'CCT default, not the hue 30');
   assert.equal(entry.settings.presets, '');
 });
 
@@ -192,6 +192,50 @@ test('forgetActionId matches nothing without an actionid', () => {
   ensureEntry(contexts, ctx('1_0', ''), { uuid: `${UUID}.hue` }, findAction);
   assert.equal(forgetActionId(contexts, '', 'other'), 0, 'an empty id must not match every key');
   assert.equal(contexts.size, 1);
+});
+
+// These two pin the merge `ensureEntry` performs. The service used to undo it immediately
+// after, rebuilding the settings from the action defaults plus the message, which is what
+// actually reset the untouched fields - see the handlers in app.js. That layer is not
+// covered here: app.js opens a websocket to UlanziStudio on import and the SDK is not part
+// of the repository, so it cannot be imported by a test. If the merge here is ever undone,
+// the fix in app.js has to go with it.
+
+test('a partial message leaves the settings it does not mention alone', () => {
+  // The property inspector saves as the user edits, and a panel only ever sends the
+  // fields it holds. The dial panels hold the range and the step as well as the preset
+  // rows, so a message about one of them carries nothing about the others.
+  //
+  // Rebuilding the settings from the action defaults plus the message - which is what the
+  // service used to do on top of this - reset every field the message left out. Saving a
+  // preset list put the dial's own step back to its default, and editing the step put the
+  // presets back to theirs.
+  const contexts = new Map();
+  const context = ctx('3_3', 'abc');
+
+  ensureEntry(contexts, context, { uuid: `${UUID}.hue`, param: { step: 30, presets: '200,240' } }, findAction);
+  const { entry } = ensureEntry(contexts, context, { uuid: `${UUID}.hue`, param: { step: 45 } }, findAction);
+
+  assert.equal(entry.settings.step, 45, 'the field the message carried was applied');
+  assert.equal(entry.settings.presets, '200,240', 'and the one it did not mention survived');
+});
+
+test('a partial message does not lose the preset names either', () => {
+  // The names travel beside the values in one string, and they are what the row editor
+  // shows back. Losing them alone would relabel every preset on the next draw.
+  const contexts = new Map();
+  const context = ctx('3_3', 'abc');
+
+  ensureEntry(
+    contexts,
+    context,
+    { uuid: `${UUID}.hue`, param: { presets: '200,240', presetNames: 'Sunset,Night' } },
+    findAction
+  );
+  const { entry } = ensureEntry(contexts, context, { uuid: `${UUID}.hue`, param: { max: 300 } }, findAction);
+
+  assert.equal(entry.settings.max, 300);
+  assert.equal(entry.settings.presetNames, 'Sunset,Night');
 });
 
 test('a stale entry does not survive a removal, so the next placement starts clean', () => {

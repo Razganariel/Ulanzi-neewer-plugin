@@ -42,7 +42,6 @@ section {
   margin-bottom: 14px;
 }
 
-legend,
 h2 {
   margin: 0 0 10px;
   font-size: 12px;
@@ -76,10 +75,6 @@ select {
   font: inherit;
 }
 
-input[type="range"] {
-  width: 100%;
-}
-
 .row {
   display: flex;
   gap: 8px;
@@ -88,6 +83,40 @@ input[type="range"] {
 
 .row > * {
   flex: 1;
+  /* Without this a flex child refuses to shrink below the width its content asks for,
+     and the row overflows its panel instead of fitting. */
+  min-width: 0;
+}
+
+/*
+ * Fields side by side.
+ *
+ * The SDK sizes every field for a full-width row: a 112px label and a 320px input, so
+ * three of them in a row are three times the width of the panel and the last one is
+ * pushed out of sight - the Range section of the dials lost its Step field that way.
+ * Stacked, each column is only as wide as the input it holds.
+ */
+.row > .uspi-item {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  margin: 10px 0;
+}
+
+.row > .uspi-item .uspi-item-label {
+  width: auto;
+  text-align: left;
+  margin-right: 0;
+}
+
+/* The SDK appends a colon to every label, which reads as noise once it is on its own line. */
+.row > .uspi-item .uspi-item-label::after {
+  content: "";
+}
+
+.row > .uspi-item .uspi-item-value {
+  width: 100%;
+  min-width: 0;
 }
 
 button {

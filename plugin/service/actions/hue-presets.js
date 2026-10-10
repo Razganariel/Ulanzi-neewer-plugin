@@ -14,9 +14,9 @@
  * drift apart.
  */
 
-import { ACTION, STATE } from '../core/constants.js';
+import { ACTION } from '../core/constants.js';
 import { applyNextHuePreset } from './hue.js';
-import { setStateIcon, setTitle } from '../core/ui.js';
+import { setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.HUE_PRESETS;
 
@@ -30,8 +30,7 @@ export function render({ $UD, context, snap }) {
   // No preset number on the key: the service would have to parse the list on every
   // repaint to know it. The current hue is truthful either way.
   const value = `${Math.round(snap.hue)}`;
-  setStateIcon($UD, context, STATE.DEFAULT, value);
-  setTitle($UD, context, `presets (${value})`);
+  setTitle($UD, context, value);
 }
 
 export async function onRun(ctx) {

@@ -140,6 +140,16 @@ function mount(spec = SCENE) {
       }
       return raw;
     },
+    // The rule itself lives in shared.js, which a browser loads before this file. The
+    // editor calls it rather than keeping its own copy, so a stand-in has to be the same
+    // rule rather than a different one.
+    withoutRowFields: (settings) => {
+      const out = { ...settings };
+      for (const key of Object.keys(out)) {
+        if (/^p\d+_(name|value|third)$/.test(key)) delete out[key];
+      }
+      return out;
+    },
   };
   // PI is passed as its own binding because the editor reaches for the bare global,
   // which in a browser is the same object as window.PI.
@@ -268,6 +278,37 @@ test('deleting a row renumbers the rest and saves immediately', () => {
   );
 });
 
+test('every row can still be deleted after one in the middle was', () => {
+  // The reported failure: with two presets, the last one deleted and the one before it
+  // then refused, and the only way out was to open another key and come back. The delete
+  // button held the row's position from the moment it was built, so once a row was
+  // removed every row below it pointed one place too far - at nothing at all.
+  const { editor, dom, sent } = mount();
+  editor.render({ presets: '3400:100,4500:100,5600:100', presetNames: 'A,B,C' });
+
+  // Take out the middle one.
+  dom.registry.get('preset-rows').querySelectorAll('tr')[1].querySelectorAll('button')[1].click();
+  assert.equal(sent.at(-1).presets, '3400:100,5600:100');
+
+  // The rows below it moved up, and their buttons have to follow.
+  const remaining = dom.registry.get('preset-rows').querySelectorAll('tr');
+  assert.equal(remaining.length, 2);
+  remaining[1].querySelectorAll('button')[1].click();
+  assert.equal(sent.at(-1).presets, '3400:100', 'the last row went too, on the same panel');
+
+  remaining[0].querySelectorAll('button')[1].click();
+  assert.equal(dom.registry.get('preset-rows').querySelectorAll('tr').length, 1, 'and the last one leaves the blank row');
+});
+
+test('deleting down to nothing leaves one empty row rather than an empty table', () => {
+  const { editor, dom } = mount();
+  editor.render({ presets: '3400:100,4500:100', presetNames: 'A,B' });
+  const table = dom.registry.get('preset-rows');
+  table.querySelectorAll('tr')[0].querySelectorAll('button')[1].click();
+  table.querySelectorAll('tr')[0].querySelectorAll('button')[1].click();
+  assert.equal(table.querySelectorAll('tr').length, 1, 'there is always somewhere to type');
+});
+
 test('adding twice leaves a single empty row to type into', () => {
   const { editor, dom } = mount();
   editor.render({ presets: '3400:28', presetNames: 'A' });
@@ -315,6 +356,35 @@ test('settings arriving from elsewhere do rebuild the rows', () => {
   editor.render({ presets: '3400:28', presetNames: 'A' });
   editor.render({ presets: '5600:70', presetNames: 'Elsewhere' });
   assert.equal(rowInputs(dom, 0)[1].value, '5600');
+});
+
+test('an echo about something else leaves a half typed row alone', () => {
+  // Changing the device, the step or the bounds saves automatically, and the host answers
+  // with the settings it stored. That answer describes the presets, which have not moved,
+  // so rebuilding the rows would silently discard whatever was being typed - the exact
+  // opposite of what an explicit Save button is for.
+  const { editor, dom } = mount();
+  editor.render({ presets: '3400:28', presetNames: 'A' });
+  editor.addRow();
+  type(dom, 1, 'name', 'Sunset');
+  type(dom, 1, 'value', '4500');
+  const before = dom.registry.get('preset-rows').querySelectorAll('tr')[1];
+
+  editor.render({ presets: '3400:28', presetNames: 'A', device: 'lamp-2', step: '10' });
+
+  const after = dom.registry.get('preset-rows').querySelectorAll('tr')[1];
+  assert.equal(after, before, 'the row under the cursor is the same node');
+  assert.equal(after.querySelector('[data-field="name"]').value, 'Sunset', 'and still holds what was typed');
+});
+
+test('an echo that really changed the presets does rebuild the rows', () => {
+  // The counterpart, so the rule above cannot be met by simply never rebuilding: when the
+  // stored list has moved, the rows are stale and have to follow.
+  const { editor, dom } = mount();
+  editor.render({ presets: '3400:28', presetNames: 'A' });
+  editor.render({ presets: '3400:28,5600:70', presetNames: 'A,Daylight', device: 'lamp-2' });
+  assert.equal(dom.registry.get('preset-rows').querySelectorAll('tr').length, 2, 'the added preset is shown');
+  assert.equal(rowInputs(dom, 1)[1].value, '5600');
 });
 
 test('the per-row inputs are never persisted as settings of their own', () => {

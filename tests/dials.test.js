@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Encoder action behaviour.
  *
  * Each dial action is driven through a fake light so the tests can assert the
@@ -9,9 +9,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { DEFAULTS } from '../plugin/service/core/constants.js';
-import { rotateSteps, walkList } from '../plugin/service/core/dial.js';
+import { DEFAULTS, LIMITS } from '../plugin/service/core/constants.js';
+import { dialBounds, nextValueInList, rotateSteps, walkList } from '../plugin/service/core/dial.js';
+import { atBound } from '../plugin/service/actions/stepper.js';
 import * as hue from '../plugin/service/actions/hue.js';
 import * as huePresets from '../plugin/service/actions/hue-presets.js';
 import * as hueUp from '../plugin/service/actions/hue-up.js';
@@ -121,6 +121,16 @@ test('a scene added below the others still comes up', async () => {
   );
 });
 
+test('every dial answers a press, and none of them answers a key press', () => {
+  // A dial press is its own host event: the host never sends onRun for an encoder, so
+  // the hook has to exist on all four and only on the press side. A dial action that
+  // grew an onRun would be one a button could silently drive.
+  for (const mod of [brightness, saturation, hue, cct]) {
+    assert.equal(typeof mod.onDialPress, 'function', `${mod.uuid} answers a dial press`);
+    assert.equal(mod.onRun, undefined, `${mod.uuid} answers no key press`);
+  }
+});
+
 test('the preset walk is stepped by position, not by value', () => {
   // The concept shared by every dial: one step along the list from the entry in use,
   // wrapping at the end. A value search would skip anything the user entered out of
@@ -209,6 +219,45 @@ test('rotateSteps is still the only decoder, holds included', () => {
   assert.equal(rotateSteps({ rotateEvent: 'hold-right' }), 1);
   assert.equal(rotateSteps({ rotateEvent: 'none' }), 0);
   assert.equal(rotateSteps(undefined), 0);
+});
+
+test('the sweep range is the one the panel asked for, inside what the field allows', () => {
+  const limits = { min: 1, max: 100 };
+  const fallback = { min: 1, max: 100 };
+
+  assert.deepEqual(dialBounds({ min: 20, max: 80 }, limits, fallback), { min: 20, max: 80 });
+  // A range wider than the field would command a value the fixture cannot take.
+  assert.deepEqual(dialBounds({ min: -50, max: 500 }, limits, fallback), { min: 1, max: 100 });
+  // Absent or unusable settings fall back rather than sweeping nothing.
+  assert.deepEqual(dialBounds({}, limits, fallback), { min: 1, max: 100 });
+  assert.deepEqual(dialBounds({ min: '', max: 'x' }, limits, fallback), { min: 1, max: 100 });
+});
+
+test('a range that crosses itself collapses instead of sweeping backwards', () => {
+  // The order the two clamps are applied in is the whole point: `max` is read against
+  // the resolved `min`, so a stored maximum under the minimum collapses onto it rather
+  // than producing a range that turns the other way.
+  const limits = { min: 0, max: 100 };
+  const fallback = { min: 0, max: 100 };
+  assert.deepEqual(dialBounds({ min: 80, max: 20 }, limits, fallback), { min: 80, max: 80 });
+});
+
+test('a preset left outside the sweep range is pulled back into it', () => {
+  // Otherwise the lamp would be sent a value the action clamps again, landing on
+  // something the user never chose. 10 and 90 become the bounds they are nearest.
+  const bounds = { min: 20, max: 80 };
+  const defaults = { presets: '10,50,90' };
+  // The lamp is showing 25, so the walk goes to the next stored entry, clamped.
+  assert.equal(nextValueInList({ presets: '10,50,90' }, 25, defaults, bounds), 50);
+  // Sitting on the last entry, it wraps to the first, which was below the range.
+  assert.equal(nextValueInList({ presets: '10,50,90' }, 90, defaults, bounds), 20, 'wrapped to the clamped first entry');
+  // An empty list is not a value, and the caller must be able to tell.
+  assert.equal(nextValueInList({ presets: '' }, 50, { presets: '' }, bounds), null);
+});
+
+test('the stored default list is used when the settings carry none', () => {
+  const bounds = { min: 1, max: 100 };
+  assert.equal(nextValueInList({}, 25, { presets: '25,50,75,100' }, bounds), 50);
 });
 
 test('a hue preset added below the others still comes up', async () => {
@@ -404,19 +453,34 @@ test('a bare kelvin preset keeps the current brightness', () => {
 
 test('cct dial steps by kelvin, and wraps back to the warm end', async () => {
   const light = L({ mode: 'cct', cct: 5600 });
-  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 250 }), LEFT);
-  assert.deepEqual(light.calls, [['setCct', 5350, 100]]);
+  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 200 }), LEFT);
+  assert.deepEqual(light.calls, [['setCct', 5400, 100]]);
 
-  // wrap defaults to true: 2600 - 250 = 2350 lands below the floor and wraps to
+  // wrap defaults to true: 2600 - 200 = 2400 lands below the floor and wraps to
   // the cool end of the range.
   const bottom = L({ mode: 'cct', cct: 2600 });
-  await cct.onDialRotate(ctxFor(bottom, { ...cct.defaults, step: 250 }), LEFT);
-  assert.deepEqual(bottom.calls, [['setCct', 8351, 100]]);
+  await cct.onDialRotate(ctxFor(bottom, { ...cct.defaults, step: 200 }), LEFT);
+  assert.deepEqual(bottom.calls, [['setCct', 8401, 100]]);
+});
+
+test('a stored cct step the wire cannot carry falls back to the default', async () => {
+  // The temperature travels as one byte of 100 K. An installation saved when the panel
+  // offered 250 K holds that value, and 2500 + 250 = 2750 is not a temperature the frame
+  // can express: the lamp would land somewhere the dial never said. Falling back to a
+  // step on the grid moves it exactly where the panel now says.
+  const light = L({ mode: 'cct', cct: 5600 });
+  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 250 }), LEFT);
+  assert.deepEqual(light.calls, [['setCct', 5400, 100]], 'the default 200 K step, not a rounded 5350');
+
+  // A step below the grid is refused for the same reason.
+  const finer = L({ mode: 'cct', cct: 5600 });
+  await cct.onDialRotate(ctxFor(finer, { ...cct.defaults, step: 50 }), LEFT);
+  assert.deepEqual(finer.calls, [['setCct', 5400, 100]]);
 });
 
 test('cct dial can be told to stop at the ends', async () => {
   const light = L({ mode: 'cct', cct: 8350 });
-  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 250, wrap: 'false' }), RIGHT);
+  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 200, wrap: 'false' }), RIGHT);
   assert.deepEqual(light.calls, [['setCct', 8500, 100]]);
 });
 
@@ -442,6 +506,18 @@ test('cct up and down move in opposite directions and keep the brightness', asyn
   const down = L({ mode: 'cct', cct: 5000, brightness: 28 });
   await cctDown.onRun(ctxFor(down, cctDown.defaults));
   assert.deepEqual(down.calls, [['setCct', 4800, 28]], 'down goes the other way');
+});
+
+test('a press that lands back where it started is recognised as settled', () => {
+  // Shared by every button that clamps rather than wraps. The comparison is made after
+  // clamping, which is the part that is easy to get backwards: from 8400 K a 200 K step
+  // overshoots 8500 K but the light still moves, so the frame is worth sending.
+  const settled = atBound('cct', LIMITS.CCT.min, LIMITS.CCT.max);
+  assert.equal(settled({ cct: 8400 }, 200), false, 'overshooting the bound still moves');
+  assert.equal(settled({ cct: 8500 }, 200), true, 'already at the top');
+  assert.equal(settled({ cct: 2500 }, -200), true, 'already at the bottom');
+  assert.equal(settled({ cct: 5000 }, 200), false);
+  assert.equal(settled({ cct: 5000 }, -200), false);
 });
 
 test('a cct press stops at the bounds instead of wrapping', async () => {
@@ -544,15 +620,3 @@ test('saturation starts from 0, not from full colour', async () => {
   assert.equal(saturation.defaults.presets.split(',')[0], '0', 'the list starts at the same 0');
 });
 
-test('a dial press is a separate host event from a key press', () => {
-  // Guards the wiring: app.js must route onDialUp to onDialPress, because the
-  // host never sends onRun for an encoder.
-  const app = readFileSync(new URL('../plugin/service/app.js', import.meta.url), 'utf8');
-  assert.match(app, /onDialUp\(/, 'app.js listens for the dial press event');
-  assert.match(app, /onDialPress/, 'and routes it to the action hook');
-  for (const mod of [brightness, saturation, hue]) {
-    assert.equal(typeof mod.onDialPress, 'function', `${mod.uuid} answers a dial press`);
-  }
-  // CCT dial has its presets on press, too.
-  assert.equal(typeof cct.onDialPress, 'function', 'cct answers a dial press');
-});

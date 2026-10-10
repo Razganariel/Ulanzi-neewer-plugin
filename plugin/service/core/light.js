@@ -57,10 +57,12 @@ export class NeewerLight extends EventEmitter {
   /**
    * @param {{address?:string, name?:string}} [device]
    * @param {object} [initialState] last commanded state of a previous session
+   * @param {NeewerTransport} [transport] injected so a test can drive the link
+   *        lifecycle without spawning the native helper
    */
-  constructor(device = {}, initialState = null) {
+  constructor(device = {}, initialState = null, transport = null) {
     super();
-    this.transport = new NeewerTransport();
+    this.transport = transport || new NeewerTransport();
     // Armed here rather than on the first write: the fixture reports its own state the
     // moment the link comes up, and waiting for a write meant that frame was dropped.
     this.transport.onFrame = (data) => this._onNotify(data);
@@ -306,8 +308,14 @@ export class NeewerLight extends EventEmitter {
     await this.connect();
   }
 
+  /**
+   * Terminal: this light is being forgotten, so its helper goes with it.
+   *
+   * `disconnect` would only close the BLE link, and the helper process stays alive
+   * until its stdin closes. Callers do not await this, so it must not reject.
+   */
   stop() {
     this._stopped = true;
-    this.transport.disconnect();
+    Promise.resolve(this.transport.dispose()).catch(() => {});
   }
 }

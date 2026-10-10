@@ -41,15 +41,17 @@ export const NEEWER = Object.freeze({
 
 export const NAME_HINTS = ['NEEWER', 'RGB62', 'RGB660', 'SL-', 'GL1', 'ZN-', 'NW-'];
 
+/**
+ * What each field can physically take.
+ *
+ * Grouped per field rather than as loose `*_MIN` / `*_MAX` pairs: a range is always read
+ * as a pair, and `LIMITS.BRIGHTNESS.min` says which field it belongs to at the call site.
+ */
 export const LIMITS = Object.freeze({
-  BRIGHTNESS_MIN: 1,
-  BRIGHTNESS_MAX: 100,
-  HUE_MIN: 0,
-  HUE_MAX: 360,
-  SATURATION_MIN: 0,
-  SATURATION_MAX: 100,
-  CCT_MIN: 2500,
-  CCT_MAX: 8500,
+  BRIGHTNESS: Object.freeze({ min: 1, max: 100 }),
+  HUE: Object.freeze({ min: 0, max: 360 }),
+  SATURATION: Object.freeze({ min: 0, max: 100 }),
+  CCT: Object.freeze({ min: 2500, max: 8500 }),
 });
 
 export const DEFAULTS = Object.freeze({

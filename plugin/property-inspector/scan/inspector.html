@@ -45,7 +45,11 @@
           </label>
           <label class="uspi-item">
             <span class="uspi-item-label">Filter</span>
-            <select class="uspi-item-value" name="onlyNeewer">
+            <!-- `only` is the name the Scan action reads on a key press. It used to be
+                 written as `onlyNeewer`, which the action never looked at, so this
+                 selector did nothing. `onlyNeewer` still names the panel's own Scan
+                 button, which is a different path. -->
+            <select class="uspi-item-value" name="only">
               <option value="true">Neewer devices only</option>
               <option value="false">Show every BLE device</option>
             </select>

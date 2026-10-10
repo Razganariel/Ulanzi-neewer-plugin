@@ -8,7 +8,6 @@ import { stepper } from './stepper.js';
 
 export const { uuid, defaults, render, onRun } = stepper({
   uuid: ACTION.SATURATION_DOWN,
-  title: (value) => `Saturation down (${value})`,
   sign: -1,
   step: 5,
   maxStep: 25,
