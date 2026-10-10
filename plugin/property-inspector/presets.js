@@ -92,7 +92,6 @@
       const tr = cell('tr', 'preset-row');
 
       const number = cell('td', 'pick');
-      number.dataset.index = String(index);
       tr.appendChild(number);
 
       for (const field of hasNames ? ['name', 'value', 'third'] : ['value']) {
@@ -109,7 +108,9 @@
 
       const actions = cell('td', 'actions');
       actions.appendChild(iconButton('Save this preset', SAVE_ICON, () => save()));
-      actions.appendChild(iconButton('Delete this preset', DELETE_ICON, () => remove(index)));
+      // The row itself, not its position: deleting one row moves every row after it, so
+      // an index captured when the row was built goes stale the moment the list changes.
+      actions.appendChild(iconButton('Delete this preset', DELETE_ICON, () => remove(tr)));
       tr.appendChild(actions);
       return tr;
     }
@@ -175,10 +176,22 @@
       if (inputs[0]) inputs[0].focus();
     }
 
-    function remove(index) {
-      const tr = rows()[index];
+    /**
+     * Deletes one row and saves what is left.
+     *
+     * Takes the row rather than its position: every row after the deleted one moves up,
+     * and a position captured when the button was built would then point at the wrong row,
+     * or at nothing at all. That is not hypothetical - it is what made the second preset
+     * of a pair refuse to delete.
+     *
+     * @param {object} tr the row to remove
+     */
+    function remove(tr) {
       if (!tr) return;
       tr.remove();
+      // Same invariant `draw` keeps: there is always one empty row to type into. Without
+      // it, deleting the last preset leaves a table with nowhere to type.
+      if (!rows().length) body.appendChild(row(0, blankRow()));
       renumber();
       clearStatus();
       save();

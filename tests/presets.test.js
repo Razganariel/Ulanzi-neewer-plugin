@@ -278,6 +278,37 @@ test('deleting a row renumbers the rest and saves immediately', () => {
   );
 });
 
+test('every row can still be deleted after one in the middle was', () => {
+  // The reported failure: with two presets, the last one deleted and the one before it
+  // then refused, and the only way out was to open another key and come back. The delete
+  // button held the row's position from the moment it was built, so once a row was
+  // removed every row below it pointed one place too far - at nothing at all.
+  const { editor, dom, sent } = mount();
+  editor.render({ presets: '3400:100,4500:100,5600:100', presetNames: 'A,B,C' });
+
+  // Take out the middle one.
+  dom.registry.get('preset-rows').querySelectorAll('tr')[1].querySelectorAll('button')[1].click();
+  assert.equal(sent.at(-1).presets, '3400:100,5600:100');
+
+  // The rows below it moved up, and their buttons have to follow.
+  const remaining = dom.registry.get('preset-rows').querySelectorAll('tr');
+  assert.equal(remaining.length, 2);
+  remaining[1].querySelectorAll('button')[1].click();
+  assert.equal(sent.at(-1).presets, '3400:100', 'the last row went too, on the same panel');
+
+  remaining[0].querySelectorAll('button')[1].click();
+  assert.equal(dom.registry.get('preset-rows').querySelectorAll('tr').length, 1, 'and the last one leaves the blank row');
+});
+
+test('deleting down to nothing leaves one empty row rather than an empty table', () => {
+  const { editor, dom } = mount();
+  editor.render({ presets: '3400:100,4500:100', presetNames: 'A,B' });
+  const table = dom.registry.get('preset-rows');
+  table.querySelectorAll('tr')[0].querySelectorAll('button')[1].click();
+  table.querySelectorAll('tr')[0].querySelectorAll('button')[1].click();
+  assert.equal(table.querySelectorAll('tr').length, 1, 'there is always somewhere to type');
+});
+
 test('adding twice leaves a single empty row to type into', () => {
   const { editor, dom } = mount();
   editor.render({ presets: '3400:28', presetNames: 'A' });
