@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Encoder action behaviour.
  *
  * Each dial action is driven through a fake light so the tests can assert the
@@ -9,8 +9,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS } from '../plugin/service/core/constants.js';
+import { DEFAULTS, LIMITS } from '../plugin/service/core/constants.js';
 import { dialBounds, nextValueInList, rotateSteps, walkList } from '../plugin/service/core/dial.js';
+import { atBound } from '../plugin/service/actions/stepper.js';
 import * as hue from '../plugin/service/actions/hue.js';
 import * as huePresets from '../plugin/service/actions/hue-presets.js';
 import * as hueUp from '../plugin/service/actions/hue-up.js';
@@ -490,6 +491,18 @@ test('cct up and down move in opposite directions and keep the brightness', asyn
   const down = L({ mode: 'cct', cct: 5000, brightness: 28 });
   await cctDown.onRun(ctxFor(down, cctDown.defaults));
   assert.deepEqual(down.calls, [['setCct', 4800, 28]], 'down goes the other way');
+});
+
+test('a press that lands back where it started is recognised as settled', () => {
+  // Shared by every button that clamps rather than wraps. The comparison is made after
+  // clamping, which is the part that is easy to get backwards: from 8400 K a 200 K step
+  // overshoots 8500 K but the light still moves, so the frame is worth sending.
+  const settled = atBound('cct', LIMITS.CCT.min, LIMITS.CCT.max);
+  assert.equal(settled({ cct: 8400 }, 200), false, 'overshooting the bound still moves');
+  assert.equal(settled({ cct: 8500 }, 200), true, 'already at the top');
+  assert.equal(settled({ cct: 2500 }, -200), true, 'already at the bottom');
+  assert.equal(settled({ cct: 5000 }, 200), false);
+  assert.equal(settled({ cct: 5000 }, -200), false);
 });
 
 test('a cct press stops at the bounds instead of wrapping', async () => {

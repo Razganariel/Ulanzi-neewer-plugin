@@ -56,6 +56,26 @@ export function stepper({ uuid, title, sign, step, maxStep, format, apply, quant
 }
 
 /**
+ * A press that changes nothing: the move is compared after clamping.
+ *
+ * From 8400 K a 200 K step overshoots 8500 K but still has to land on 8500 K, so the
+ * light does move and the frame is worth sending. Only a press that is already sitting
+ * on its bound is a no-op, and sending it anyway would make the lamp answer a key it
+ * never really acted on.
+ *
+ * @param {string} field snapshot field the step moves
+ * @param {number} min
+ * @param {number} max
+ * @returns {(snap: object, delta: number) => boolean}
+ */
+export function atBound(field, min, max) {
+  return (snap, delta) => {
+    const next = Math.min(max, Math.max(min, snap[field] + delta));
+    return next === snap[field];
+  };
+}
+
+/**
  * A step is stored as a string by the inspector, and may arrive unset or junk.
  *
  * `quantum` is the wire granularity: colour temperature travels in one byte of

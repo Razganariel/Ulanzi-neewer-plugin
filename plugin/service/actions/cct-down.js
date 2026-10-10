@@ -10,23 +10,10 @@
  */
 
 import { ACTION, LIMITS } from '../core/constants.js';
-import { stepper } from './stepper.js';
+import { atBound, stepper } from './stepper.js';
 
 /** The frame carries one byte of 100 K, so nothing finer can be expressed. */
 const QUANTUM = 100;
-
-/**
- * True when the press would change nothing.
- *
- * The move is compared after clamping, not before: from 8400 K a 200 K step
- * overshoots 8500 K but still has to land on 8500 K, so the light does move and
- * the frame is worth sending. Only a press that is already sitting on its bound
- * is a no-op.
- */
-const atBound = (snap, delta) => {
-  const next = Math.min(LIMITS.CCT.max, Math.max(LIMITS.CCT.min, snap.cct + delta));
-  return next === snap.cct;
-};
 
 export const { uuid, defaults, render, onRun } = stepper({
   uuid: ACTION.CCT_DOWN,
@@ -36,7 +23,7 @@ export const { uuid, defaults, render, onRun } = stepper({
   maxStep: 1000,
   quantum: QUANTUM,
   format: (snap) => (snap.mode === 'cct' ? `${snap.cct}K` : 'HSL'),
-  settled: atBound,
+  settled: atBound('cct', LIMITS.CCT.min, LIMITS.CCT.max),
   // One argument: setCct keeps whatever brightness the dial or a scene left.
   apply: (light, delta) => light.stepCct(delta),
 });
