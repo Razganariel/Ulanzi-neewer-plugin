@@ -11,20 +11,4 @@ const editor = presetEditor({
   third: { label: 'Saturation', min: 0, max: 100 },
 });
 
-PI.boot('#property-inspector', {
-  autoSave: false,
-  onState(state) {
-    PI.status(PI.el('link'), state.connected ? 'connected' : state.connecting ? 'connecting' : 'disconnected');
-    PI.setText('detail', `${state.name || 'Neewer'} ${state.address || '-'}`);
-  },
-  onRegistry({ devices, deviceId }) {
-    PI.deviceSelect('device', devices, deviceId);
-    PI.setText('device-hint', devices.length ? '' : 'No light registered yet - use the Neewer Scan action to add one.');
-  },
-  onSettings(settings) {
-    editor.render(settings);
-  },
-  onError(message) {
-    PI.showError('error', message);
-  },
-});
+PI.panel({ onSettings: (settings) => editor.render(settings) });

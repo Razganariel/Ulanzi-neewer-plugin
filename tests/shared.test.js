@@ -15,13 +15,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 const SOURCE = readFileSync(new URL('../plugin/property-inspector/shared.js', import.meta.url), 'utf8');
 
-/** A control, with just the members a form read and a hydration need. */
+/** A control, with just the members a form read, a hydration or a picker need. */
 function control(name, { value = '', tag = 'input' } = {}) {
-  return { name, value, tagName: tag.toUpperCase(), type: 'text', className: '', dataset: {}, style: {}, children: [] };
+  const node = {
+    name,
+    value,
+    tagName: tag.toUpperCase(),
+    type: 'text',
+    className: '',
+    dataset: {},
+    style: {},
+    children: [],
+    options: [],
+    appendChild(child) {
+      node.children.push(child);
+      node.options.push(child);
+      return child;
+    },
+  };
+  return node;
 }
 
 /** The two DOM shapes the bootstrap uses: a form with named controls, and lookups by id. */
@@ -36,15 +51,33 @@ function makeDom(formControls) {
     controls: formControls,
   };
   for (const c of formControls) byId.set(c.name, c);
+  // The ids the shared panel body writes to, which are not form controls.
+  for (const id of ['detail', 'device-hint', 'error', 'link']) {
+    if (!byId.has(id)) {
+      const node = {
+        ...control(id),
+        textContent: '',
+        style: {},
+        // The connection dot is drawn as a child of the link element.
+        querySelector: (sel) => (sel === '.dot' ? { className: '' } : { textContent: '' }),
+      };
+      byId.set(id, node);
+    }
+  }
 
   const document = {
     body: { appendChild() {}, dataset: { actionid: 'test.action' } },
     querySelector: (sel) => (sel === '#property-inspector' ? form : null),
     getElementById: (id) => byId.get(id) || null,
-    createElement: () => ({ style: {}, className: '', textContent: '', appendChild() {} }),
+    createElement: (tag) => ({
+      ...control('', { tag }),
+      value: '',
+      appendChild() {},
+      options: [],
+    }),
   };
   const window = { addEventListener() {}, PI: null };
-  return { window, document, form };
+  return { window, document, form, byId };
 }
 
 /** A stand-in for the bundled Utils, faithful about the two functions that matter. */
@@ -72,7 +105,7 @@ function makeUtils() {
 
 /** Boots the bootstrap over a form, and returns what a panel would see. */
 function boot(formControls) {
-  const { window, document, form } = makeDom(formControls);
+  const { window, document, form, byId } = makeDom(formControls);
   const Utils = makeUtils();
   const sent = [];
   /** The callbacks the panel registered, so a test can play the part of the host. */
@@ -98,7 +131,16 @@ function boot(formControls) {
   const handle = window.PI.boot('#property-inspector', {});
   // `boot` hands back the form and the debounced sender; the panel surface is the PI
   // object itself, which is what an inspector script reaches for.
-  return { PI: window.PI, form: handle.form, sent, handlers };
+  return {
+    PI: window.PI,
+    form: handle.form,
+    sent,
+    handlers,
+    text: (id) => {
+      const node = byId.get(id);
+      return node && node.textContent !== undefined ? node.textContent : node?.value;
+    },
+  };
 }
 
 /** Fires the form's change handler, as the browser would. */
@@ -187,4 +229,39 @@ test('reading the form still reports the row fields to the editor', () => {
   const read = PI.read();
   assert.equal(read.p0_name, 'Sunset', 'the editor can still see them');
   assert.equal(read.presets, '3400:28');
+});
+
+test('the panel strips the row fields for the editor too', () => {
+  // The one rule, now that both paths go through it. Two implementations of it is how the
+  // automatic path and the Save button drifted apart in the first place.
+  const { PI } = boot([control('p0_name', { value: 'Sunset' }), control('presets', { value: '3400:28' })]);
+  assert.deepEqual(PI.withoutRowFields(PI.read()), { presets: '3400:28' });
+});
+
+test('the shared panel body shows the light, the picker and the error', () => {
+  // `PI.panel` replaced the same four handlers copied into eight files. It is the only
+  // thing standing between a panel and a blank one, so what it does is pinned here.
+  const { PI, handlers, text } = boot([control('device', { value: '', tag: 'select' })]);
+  PI.panel({ detail: (state) => `at ${state.brightness}%` });
+
+  handlers.settings({ settings: { device: 'lamp-9' } });
+  assert.equal(text('device'), 'lamp-9', 'the form was hydrated');
+
+  handlers.toInspector({ payload: { event: 'state', state: { connected: true, name: 'Key', address: 'AA', brightness: 42 } } });
+  assert.equal(text('detail'), 'at 42%', 'the detail line comes from the panel');
+
+  handlers.toInspector({ payload: { event: 'state', state: { connecting: true, name: 'Key', address: 'AA' } } });
+  handlers.toInspector({ payload: { event: 'registry', devices: [], activeId: '' } });
+  assert.equal(
+    text('device-hint'),
+    'No light registered yet - use the Neewer Scan action to add one.',
+    'and an empty registry says so instead of leaving a stale picker'
+  );
+});
+
+test('the shared panel body has a default detail line', () => {
+  const { PI, handlers, text } = boot([]);
+  PI.panel();
+  handlers.toInspector({ payload: { event: 'state', state: { connected: false, name: 'Key', address: 'AA:BB' } } });
+  assert.equal(text('detail'), 'Key AA:BB');
 });

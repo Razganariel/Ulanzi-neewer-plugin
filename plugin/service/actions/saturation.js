@@ -16,8 +16,8 @@
  */
 
 import { ACTION, LIMITS, STATE } from '../core/constants.js';
-import { rotateSteps, walkList } from '../core/dial.js';
-import { clamp, dialStep, parseList } from '../core/params.js';
+import { dialBounds, nextValueInList, rotateSteps } from '../core/dial.js';
+import { dialStep } from '../core/params.js';
 import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.SATURATION;
@@ -25,8 +25,8 @@ export const uuid = ACTION.SATURATION;
 export const defaults = {
   device: '',
   step: 5,
-  min: LIMITS.SATURATION_MIN,
-  max: LIMITS.SATURATION_MAX,
+  min: LIMITS.SATURATION.min,
+  max: LIMITS.SATURATION.max,
   presets: '0,50,75,100',
 };
 
@@ -41,8 +41,7 @@ export async function onDialRotate(ctx, message) {
   const { settings, light, snap, report } = ctx;
   const dir = rotateSteps(message);
   if (dir === 0) return;
-  const min = clamp(settings.min, LIMITS.SATURATION_MIN, LIMITS.SATURATION_MAX, defaults.min);
-  const max = clamp(settings.max, min, LIMITS.SATURATION_MAX, defaults.max);
+  const { min, max } = dialBounds(settings, LIMITS.SATURATION, defaults);
   const step = dialStep(settings.step, 1, max - min, defaults.step, [1, 2, 5, 10, 25]);
   const next = Math.min(max, Math.max(min, snap.saturation + dir * step));
   if (next === snap.saturation) return;
@@ -56,10 +55,8 @@ export async function onDialRotate(ctx, message) {
 /** Pressing the dial steps to the next preset, wrapping at the end. */
 export async function onDialPress(ctx) {
   const { settings, light, snap, report } = ctx;
-  const min = clamp(settings.min, LIMITS.SATURATION_MIN, LIMITS.SATURATION_MAX, defaults.min);
-  const max = clamp(settings.max, min, LIMITS.SATURATION_MAX, defaults.max);
-  const presets = parseList(settings.presets ?? defaults.presets).map((v) => clamp(v, min, max, min));
-  const next = walkList(presets, snap.saturation, (v) => v);
+  const bounds = dialBounds(settings, LIMITS.SATURATION, defaults);
+  const next = nextValueInList(settings, snap.saturation, defaults, bounds);
   if (next === null) return;
   try {
     await light.setSaturation(next);

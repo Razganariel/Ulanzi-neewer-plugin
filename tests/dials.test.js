@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULTS } from '../plugin/service/core/constants.js';
-import { rotateSteps, walkList } from '../plugin/service/core/dial.js';
+import { dialBounds, nextValueInList, rotateSteps, walkList } from '../plugin/service/core/dial.js';
 import * as hue from '../plugin/service/actions/hue.js';
 import * as huePresets from '../plugin/service/actions/hue-presets.js';
 import * as hueUp from '../plugin/service/actions/hue-up.js';
@@ -218,6 +218,45 @@ test('rotateSteps is still the only decoder, holds included', () => {
   assert.equal(rotateSteps({ rotateEvent: 'hold-right' }), 1);
   assert.equal(rotateSteps({ rotateEvent: 'none' }), 0);
   assert.equal(rotateSteps(undefined), 0);
+});
+
+test('the sweep range is the one the panel asked for, inside what the field allows', () => {
+  const limits = { min: 1, max: 100 };
+  const fallback = { min: 1, max: 100 };
+
+  assert.deepEqual(dialBounds({ min: 20, max: 80 }, limits, fallback), { min: 20, max: 80 });
+  // A range wider than the field would command a value the fixture cannot take.
+  assert.deepEqual(dialBounds({ min: -50, max: 500 }, limits, fallback), { min: 1, max: 100 });
+  // Absent or unusable settings fall back rather than sweeping nothing.
+  assert.deepEqual(dialBounds({}, limits, fallback), { min: 1, max: 100 });
+  assert.deepEqual(dialBounds({ min: '', max: 'x' }, limits, fallback), { min: 1, max: 100 });
+});
+
+test('a range that crosses itself collapses instead of sweeping backwards', () => {
+  // The order the two clamps are applied in is the whole point: `max` is read against
+  // the resolved `min`, so a stored maximum under the minimum collapses onto it rather
+  // than producing a range that turns the other way.
+  const limits = { min: 0, max: 100 };
+  const fallback = { min: 0, max: 100 };
+  assert.deepEqual(dialBounds({ min: 80, max: 20 }, limits, fallback), { min: 80, max: 80 });
+});
+
+test('a preset left outside the sweep range is pulled back into it', () => {
+  // Otherwise the lamp would be sent a value the action clamps again, landing on
+  // something the user never chose. 10 and 90 become the bounds they are nearest.
+  const bounds = { min: 20, max: 80 };
+  const defaults = { presets: '10,50,90' };
+  // The lamp is showing 25, so the walk goes to the next stored entry, clamped.
+  assert.equal(nextValueInList({ presets: '10,50,90' }, 25, defaults, bounds), 50);
+  // Sitting on the last entry, it wraps to the first, which was below the range.
+  assert.equal(nextValueInList({ presets: '10,50,90' }, 90, defaults, bounds), 20, 'wrapped to the clamped first entry');
+  // An empty list is not a value, and the caller must be able to tell.
+  assert.equal(nextValueInList({ presets: '' }, 50, { presets: '' }, bounds), null);
+});
+
+test('the stored default list is used when the settings carry none', () => {
+  const bounds = { min: 1, max: 100 };
+  assert.equal(nextValueInList({}, 25, { presets: '25,50,75,100' }, bounds), 50);
 });
 
 test('a hue preset added below the others still comes up', async () => {

@@ -18,7 +18,7 @@
  */
 
 import { ACTION, LIMITS, STATE } from '../core/constants.js';
-import { rotateSteps, walkList } from '../core/dial.js';
+import { dialBounds, rotateSteps, walkList } from '../core/dial.js';
 import { bool, clamp, dialStep, wrap } from '../core/params.js';
 import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
 
@@ -27,17 +27,15 @@ export const uuid = ACTION.CCT;
 export const defaults = {
   device: '',
   step: 250,
-  min: LIMITS.CCT_MIN,
-  max: LIMITS.CCT_MAX,
+  min: LIMITS.CCT.min,
+  max: LIMITS.CCT.max,
   wrap: true,
   presets: '3400:28,4500:16,5000:16,5600:28,6500:100',
   presetNames: 'Candle,Sunset,Afternoon light,Sunlight,Cold blue light',
 };
 
-export function bounds(settings) {
-  const min = clamp(settings.min, LIMITS.CCT_MIN, LIMITS.CCT_MAX, defaults.min);
-  const max = clamp(settings.max, min, LIMITS.CCT_MAX, defaults.max);
-  return { min, max };
+function bounds(settings) {
+  return dialBounds(settings, LIMITS.CCT, defaults);
 }
 
 export function render({ $UD, context, snap, isEncoder }) {
@@ -82,7 +80,7 @@ export function parseScenes(raw, min, max) {
     if (k === null) continue;
     const b = brightness === undefined
       ? null
-      : clamp(brightness, LIMITS.BRIGHTNESS_MIN, LIMITS.BRIGHTNESS_MAX, null);
+      : clamp(brightness, LIMITS.BRIGHTNESS.min, LIMITS.BRIGHTNESS.max, null);
     out.push({ kelvin: k, brightness: b });
   }
   return out;

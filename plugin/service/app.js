@@ -314,33 +314,37 @@ $UD.onAdd((message) => {
   scheduleRefresh(context);
 });
 
-$UD.onDidReceiveSettings((message) => {
+/**
+ * Applies settings the host sent for one context.
+ *
+ * Two events carry them and they mean the same thing: the settings of a panel, and the
+ * `paramfromapp` the host sends right after a move, once the property inspector has
+ * hydrated. Only the first is echoed back to the panel.
+ *
+ * `ensureEntry` merges: the action defaults, then whatever the instance was already
+ * carrying, then what just arrived. Rebuilding the settings from the defaults and the
+ * message instead - as this used to - reset everything the message left out, so saving a
+ * preset list put the dial's own step back to its default and editing that step emptied
+ * the presets.
+ *
+ * @param {object} message host frame
+ * @param {object} settings `message.settings` or `message.param`
+ * @param {boolean} echo whether to push the result back to the panel
+ */
+function applyHostSettings(message, settings, echo) {
   const context = message.context;
-  const { entry } = ensureEntry(contexts, context, { uuid: message.uuid, param: message.settings }, (uuid) => findByUuid(uuid));
+  const { entry } = ensureEntry(contexts, context, { uuid: message.uuid, param: settings }, (uuid) => findByUuid(uuid));
   if (!entry) return;
-  // Same instance on a key we did not know about yet: the settings arrived
-  // before any add, so treat it as a placement and draw the key.
+  // The ghost of the key this action used to sit on has to go, whether the settings
+  // arrived as a placement on a key we had never seen or after a move.
   forgetActionId(contexts, decodeContext(context).actionid, context);
-  // `ensureEntry` has already merged the defaults, whatever the instance was carrying and
-  // what just arrived. Rebuilding it from the defaults and the message alone threw the
-  // rest away: a message that does not mention every setting - a panel saving one field,
-  // or the preset rows being saved without the dial's own bounds - silently reset
-  // everything it left out to its default.
-  $UD.sendParamFromPlugin(entry.settings, context);
+  if (echo) $UD.sendParamFromPlugin(entry.settings, context);
   refresh(context);
-});
+}
 
-$UD.onParamFromApp((message) => {
-  const context = message.context;
-  const { entry } = ensureEntry(contexts, context, { uuid: message.uuid, param: message.param }, (uuid) => findByUuid(uuid));
-  if (!entry) return;
-  // paramfromapp is what the host sends right after a move, once the property
-  // inspector hydrates. It carries no add, so the ghost of the previous key is
-  // still registered here and has to go.
-  forgetActionId(contexts, decodeContext(context).actionid, context);
-  // Merged, not rebuilt: see the handler above.
-  refresh(context);
-});
+$UD.onDidReceiveSettings((message) => applyHostSettings(message, message.settings, true));
+
+$UD.onParamFromApp((message) => applyHostSettings(message, message.param, false));
 
 $UD.onClear((message) => {
   // The host sends an array of {context} items; a single-context shape is also

@@ -157,10 +157,112 @@
     return false;
   }
 
+  /** Named rather than written inline in the object below, so they can be shared. */
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function setText(id, text) {
+    const node = el(id);
+    if (node) node.textContent = text;
+  }
+
+  function showError(id, message) {
+    const node = el(id);
+    if (!node) return;
+    node.textContent = message || '';
+    node.style.display = message ? 'block' : 'none';
+  }
+
+  function status(node, state) {
+    if (!node) return;
+    const dot = node.querySelector('.dot');
+    const label = node.querySelector('.label');
+    // `on` only when the link is up. `connecting` and `disconnected` both leave the dot
+    // unlit, which is what the stylesheet draws for them.
+    if (dot) dot.className = `dot ${state === 'connected' ? 'on' : ''}`;
+    if (label) label.textContent = state;
+  }
+
+  /**
+   * Fills a "Device" picker from the registry. The control carries name="device"
+   * so the normal form handler persists the choice, but its options come from
+   * the main service rather than from the saved settings, hence this helper.
+   *
+   * @param {string} id
+   * @param {Array<{id:string,name:string,address:string}>} devices
+   * @param {string} deviceId  the device this action is bound to
+   */
+  function deviceSelect(id, devices, deviceId) {
+    const select = el(id);
+    if (!select) return;
+    const current = deviceId != null ? String(deviceId) : select.value;
+    select.textContent = '';
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = devices.length ? 'Default device' : 'No device registered';
+    select.appendChild(blank);
+    for (const device of devices) {
+      const option = document.createElement('option');
+      option.value = device.id;
+      option.textContent = device.name ? `${device.name} - ${device.address}` : device.address;
+      select.appendChild(option);
+    }
+    // A stored id that is no longer registered would silently blank the picker.
+    select.value = [...select.options].some((o) => o.value === current) ? current : '';
+  }
+
+  const NO_DEVICE_HINT = 'No light registered yet - use the Neewer Scan action to add one.';
+
+  /**
+   * Boots the body every panel shares: the connection dot, the detail line, the light
+   * picker and the error strip.
+   *
+   * Fifteen of the sixteen panels do exactly this and differ only in the detail line and
+   * in what they do with the settings. Written out per panel it was copied into eight
+   * files, which is how the wording of the hint and the shape of the status line drifted
+   * between them.
+   *
+   * @param {{detail?: (state: object) => string, onSettings?: (settings: object) => void}} options
+   */
+  function panel(options = {}) {
+    boot('#property-inspector', {
+      onState(state) {
+        status(el('link'), state.connected ? 'connected' : state.connecting ? 'connecting' : 'disconnected');
+        setText(
+          'detail',
+          options.detail ? options.detail(state) : `${state.name || 'Neewer'} ${state.address || '-'}`
+        );
+      },
+      onRegistry({ devices, deviceId }) {
+        deviceSelect('device', devices, deviceId);
+        setText('device-hint', devices.length ? '' : NO_DEVICE_HINT);
+      },
+      onSettings(settings) {
+        if (options.onSettings) options.onSettings(settings);
+      },
+      onError(message) {
+        showError('error', message);
+      },
+    });
+  }
+
   window.PI = {
-    el(id) {
-      return document.getElementById(id);
-    },
+    el,
+    setText,
+    showError,
+    status,
+    deviceSelect,
+    panel,
+    boot,
+    /**
+     * Strips the per-row preset inputs, so a panel never persists them as settings.
+     *
+     * The rows are named after their position (`p0_name`, `p1_value`), so they turn up in
+     * every read of the form. Both paths that write settings go through here: the automatic
+     * one in `collect`, and the preset editor's own Save.
+     */
+    withoutRowFields,
     /**
      * The settings the form currently describes, reshaped by the inspector.
      *
@@ -182,54 +284,9 @@
       $UD.sendParamFromPlugin(settings);
     },
     on(id, event, fn) {
-      const node = document.getElementById(id);
+      const node = el(id);
       if (node) node.addEventListener(event, fn);
       return node;
     },
-    setText(id, text) {
-      const node = document.getElementById(id);
-      if (node) node.textContent = text;
-    },
-    showError(id, message) {
-      const node = document.getElementById(id);
-      if (!node) return;
-      node.textContent = message || '';
-      node.style.display = message ? 'block' : 'none';
-    },
-    /**
-     * Fills a "Device" picker from the registry. The control carries name="device"
-     * so the normal form handler persists the choice, but its options come from
-     * the main service rather than from the saved settings, hence this helper.
-     *
-     * @param {string} id
-     * @param {Array<{id:string,name:string,address:string}>} devices
-     * @param {string} deviceId  the device this action is bound to
-     */
-    deviceSelect(id, devices, deviceId) {
-      const select = document.getElementById(id);
-      if (!select) return;
-      const current = deviceId != null ? String(deviceId) : select.value;
-      select.textContent = '';
-      const blank = document.createElement('option');
-      blank.value = '';
-      blank.textContent = devices.length ? 'Default device' : 'No device registered';
-      select.appendChild(blank);
-      for (const device of devices) {
-        const option = document.createElement('option');
-        option.value = device.id;
-        option.textContent = device.name ? `${device.name} - ${device.address}` : device.address;
-        select.appendChild(option);
-      }
-      // A stored id that is no longer registered would silently blank the picker.
-      select.value = [...select.options].some((o) => o.value === current) ? current : '';
-    },
-    status(node, state) {
-      if (!node) return;
-      const dot = node.querySelector('.dot');
-      const label = node.querySelector('.label');
-      if (dot) dot.className = `dot ${state === 'connected' ? 'on' : state === 'error' ? 'off' : ''}`;
-      if (label) label.textContent = state;
-    },
-    boot,
   };
 })();

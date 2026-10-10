@@ -62,20 +62,20 @@ function build(op, payload) {
 }
 
 export function normalizeHue(hue) {
-  const h = clampInt(hue, LIMITS.HUE_MIN, LIMITS.HUE_MAX, LIMITS.HUE_MIN);
-  return h === LIMITS.HUE_MAX ? 0 : h;
+  const h = clampInt(hue, LIMITS.HUE.min, LIMITS.HUE.max, LIMITS.HUE.min);
+  return h === LIMITS.HUE.max ? 0 : h;
 }
 
 export function normalizeSaturation(sat) {
-  return clampInt(sat, LIMITS.SATURATION_MIN, LIMITS.SATURATION_MAX, LIMITS.SATURATION_MAX);
+  return clampInt(sat, LIMITS.SATURATION.min, LIMITS.SATURATION.max, LIMITS.SATURATION.max);
 }
 
 export function normalizeBrightness(bri) {
-  return clampInt(bri, LIMITS.BRIGHTNESS_MIN, LIMITS.BRIGHTNESS_MAX, LIMITS.BRIGHTNESS_MAX);
+  return clampInt(bri, LIMITS.BRIGHTNESS.min, LIMITS.BRIGHTNESS.max, LIMITS.BRIGHTNESS.max);
 }
 
 export function normalizeCct(kelvin) {
-  return clampInt(kelvin, LIMITS.CCT_MIN, LIMITS.CCT_MAX, LIMITS.CCT_MIN);
+  return clampInt(kelvin, LIMITS.CCT.min, LIMITS.CCT.max, LIMITS.CCT.min);
 }
 
 /** 0x78 0x81 0x01 <01|02> <chk> */

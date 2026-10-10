@@ -140,6 +140,16 @@ function mount(spec = SCENE) {
       }
       return raw;
     },
+    // The rule itself lives in shared.js, which a browser loads before this file. The
+    // editor calls it rather than keeping its own copy, so a stand-in has to be the same
+    // rule rather than a different one.
+    withoutRowFields: (settings) => {
+      const out = { ...settings };
+      for (const key of Object.keys(out)) {
+        if (/^p\d+_(name|value|third)$/.test(key)) delete out[key];
+      }
+      return out;
+    },
   };
   // PI is passed as its own binding because the editor reaches for the bare global,
   // which in a browser is the same object as window.PI.

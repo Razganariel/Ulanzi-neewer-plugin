@@ -8,9 +8,11 @@
  * Both are resolved from the fixture's reported state rather than from anything the
  * plugin remembers, which is what keeps a dial honest: a lamp the user moved by hand,
  * or another action drove, still behaves as if it had never been touched. The
- * helpers here are the two shared pieces of that rule - how a rotation is turned into
- * a signed step, and how a press walks a preset list.
+ * helpers here are the shared pieces of that rule - how a rotation is turned into
+ * a signed step, how a range is resolved, and how a press walks a preset list.
  */
+
+import { clamp, parseList } from './params.js';
 
 /** A rotation as -1 or +1, or 0 for an event that is not a rotation. */
 export function rotateSteps(message) {
@@ -48,4 +50,43 @@ export function walkList(list, current, valueOf) {
   const at = list.findIndex((item) => valueOf(item) === current);
   if (at >= 0) return list[(at + 1) % list.length];
   return list.find((item) => valueOf(item) > current) ?? list[0];
+}
+
+/**
+ * The range a dial sweeps, from its own settings.
+ *
+ * Every dial action needs the same two lines, and getting the order wrong is not
+ * visible: `min` is read before it is known, and a stored range that crosses itself - a
+ * maximum under the minimum - has to collapse rather than sweep backwards. So it is
+ * resolved once, here, and every action asks for the same answer.
+ *
+ * @param {object} settings
+ * @param {{min:number,max:number}} limits what the field can physically take
+ * @param {{min:number,max:number}} defaults the action's own defaults
+ * @returns {{min:number,max:number}}
+ */
+export function dialBounds(settings, limits, defaults) {
+  const min = clamp(settings.min, limits.min, limits.max, defaults.min);
+  const max = clamp(settings.max, min, limits.max, defaults.max);
+  return { min, max };
+}
+
+/**
+ * The next value a press should apply, from a flat list of numbers.
+ *
+ * For the dials whose presets are a plain list. The entries are clamped into the range
+ * first: a preset left over from a wider range would otherwise send a value the action
+ * would immediately clamp back, moving the lamp to something the user did not choose.
+ *
+ * @param {object} settings
+ * @param {number} current the value the lamp is showing now
+ * @param {{presets:string}} defaults
+ * @param {{min:number,max:number}} bounds
+ * @returns {number|null} the next value, or null when the list is empty
+ */
+export function nextValueInList(settings, current, defaults, bounds) {
+  const list = parseList(settings.presets ?? defaults.presets).map((value) =>
+    clamp(value, bounds.min, bounds.max, bounds.min)
+  );
+  return walkList(list, current, (value) => value);
 }

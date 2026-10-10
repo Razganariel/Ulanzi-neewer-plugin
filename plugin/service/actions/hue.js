@@ -25,7 +25,7 @@ export const defaults = {
 };
 
 /** Hue goes 0-359 so that a full turn lands back on 0 instead of 360. */
-const MAX = LIMITS.HUE_MAX - 1;
+const MAX = LIMITS.HUE.max - 1;
 
 export function render({ $UD, context, snap, isEncoder }) {
   const value = `${snap.hue}`;
@@ -48,11 +48,11 @@ export function parseHuePresets(raw) {
     const trimmed = part.trim();
     if (trimmed === '') continue;
     const [hue, saturation] = trimmed.split(':');
-    const h = clamp(hue, LIMITS.HUE_MIN, MAX, null);
+    const h = clamp(hue, LIMITS.HUE.min, MAX, null);
     if (h === null) continue;
     const s = saturation === undefined || saturation.trim() === ''
       ? null
-      : clamp(saturation, LIMITS.SATURATION_MIN, LIMITS.SATURATION_MAX, null);
+      : clamp(saturation, LIMITS.SATURATION.min, LIMITS.SATURATION.max, null);
     out.push({ hue: h, saturation: s });
   }
   return out;

@@ -24,7 +24,7 @@ const QUANTUM = 100;
  * is a no-op.
  */
 const atBound = (snap, delta) => {
-  const next = Math.min(LIMITS.CCT_MAX, Math.max(LIMITS.CCT_MIN, snap.cct + delta));
+  const next = Math.min(LIMITS.CCT.max, Math.max(LIMITS.CCT.min, snap.cct + delta));
   return next === snap.cct;
 };
 

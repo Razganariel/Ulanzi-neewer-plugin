@@ -259,25 +259,11 @@
       // The rows already show exactly this, so the echo that follows is describing what is
       // on screen. Saying so keeps `render` from rebuilding them under the caret.
       drawn = presets;
-      const settings = { ...withoutRowFields(PI.read()), presets };
+      const settings = { ...PI.withoutRowFields(PI.read()), presets };
       // A single value list has nowhere to show a name, so it does not get one stored.
       if (hasNames) settings.presetNames = names.join(',');
       PI.push(settings);
       return true;
-    }
-
-    /**
-     * Strips the per-row inputs so they are never persisted as settings of their own.
-     *
-     * `shared.js` applies the same rule on the automatic save path; this one guards the
-     * explicit Save, which is the only place these values are ever meant to be read.
-     */
-    function withoutRowFields(settings) {
-      const out = { ...settings };
-      for (const key of Object.keys(out)) {
-        if (/^p\d+_(name|value|third)$/.test(key)) delete out[key];
-      }
-      return out;
     }
 
     function label(tr) {
