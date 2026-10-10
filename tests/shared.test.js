@@ -44,6 +44,10 @@ function makeDom(formControls) {
   const byId = new Map();
   const form = {
     tagName: 'FORM',
+    // The SDK walks form.elements; the correction pass does too.
+    get elements() {
+      return this.controls;
+    },
     addEventListener(type, fn) {
       (this.listeners[type] ||= []).push(fn);
     },
@@ -88,9 +92,19 @@ function makeUtils() {
       for (const c of form.controls) if (c.name) out[c.name] = c.value;
       return out;
     },
+    /**
+     * Deliberately reproducing the SDK's own line,
+     * `element.value = value ? value : ''`, which drops every falsy setting on the floor.
+     * Faithful here matters more than correct: a stand-in that behaves better than the
+     * real thing would hide the defect this file exists to pin.
+     */
     setFormValue(settings, form) {
       for (const c of form.controls) {
-        if (c.name && settings[c.name] !== undefined) c.value = String(settings[c.name]);
+        if (!c.name || !(c.name in settings)) continue;
+        const value = settings[c.name];
+        // A real input stringifies whatever it is given; the fake has to as well, or the
+        // assertions below would be comparing a number to a string.
+        c.value = String(value ? value : '');
       }
     },
     debounce: (fn) => {
@@ -229,6 +243,49 @@ test('reading the form still reports the row fields to the editor', () => {
   const read = PI.read();
   assert.equal(read.p0_name, 'Sunset', 'the editor can still see them');
   assert.equal(read.presets, '3400:28');
+});
+
+test('a setting of zero reaches the field instead of arriving blank', () => {
+  // Saturation's minimum and hue's minimum are both 0. The SDK writes
+  // `element.value = value ? value : ''`, so they landed empty: the panel showed nothing,
+  // which reads as "unset", and saving any other field wrote that emptiness back.
+  const { form, handlers, text } = boot([
+    control('min', { value: '' }),
+    control('max', { value: '' }),
+    control('step', { value: '' }),
+  ]);
+
+  handlers.settings({ settings: { min: 0, max: 100, step: 5 } });
+
+  assert.equal(form.controls[0].value, '0', 'the zero is in the field');
+  assert.equal(form.controls[1].value, '100', 'and the rest are untouched');
+  assert.equal(form.controls[2].value, '5');
+});
+
+test('a setting of false reaches a choice that offers it', () => {
+  // "Wrap around at the limits" is a select whose false option is the string "false".
+  // Blanked, the select showed nothing at all and the next save wrote an empty setting.
+  const { form, handlers } = boot([
+    control('wrap', { value: '', tag: 'select' }),
+    control('only', { value: '', tag: 'select' }),
+  ]);
+
+  handlers.settings({ settings: { wrap: false, only: true } });
+
+  assert.equal(form.controls[0].value, 'false');
+  assert.equal(form.controls[1].value, 'true');
+});
+
+test('an absent setting is not invented', () => {
+  // The correction only puts back what the settings really carry: a field the settings
+  // say nothing about has to stay as it was, or the panel would show a default the action
+  // is not using.
+  const { form, handlers } = boot([control('min', { value: '42' }), control('max', { value: '' })]);
+
+  handlers.settings({ settings: { max: 80 } });
+
+  assert.equal(form.controls[0].value, '42', 'the field the settings never mentioned is untouched');
+  assert.equal(form.controls[1].value, '80');
 });
 
 test('the panel strips the row fields for the editor too', () => {

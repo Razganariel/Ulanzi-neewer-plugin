@@ -453,19 +453,34 @@ test('a bare kelvin preset keeps the current brightness', () => {
 
 test('cct dial steps by kelvin, and wraps back to the warm end', async () => {
   const light = L({ mode: 'cct', cct: 5600 });
-  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 250 }), LEFT);
-  assert.deepEqual(light.calls, [['setCct', 5350, 100]]);
+  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 200 }), LEFT);
+  assert.deepEqual(light.calls, [['setCct', 5400, 100]]);
 
-  // wrap defaults to true: 2600 - 250 = 2350 lands below the floor and wraps to
+  // wrap defaults to true: 2600 - 200 = 2400 lands below the floor and wraps to
   // the cool end of the range.
   const bottom = L({ mode: 'cct', cct: 2600 });
-  await cct.onDialRotate(ctxFor(bottom, { ...cct.defaults, step: 250 }), LEFT);
-  assert.deepEqual(bottom.calls, [['setCct', 8351, 100]]);
+  await cct.onDialRotate(ctxFor(bottom, { ...cct.defaults, step: 200 }), LEFT);
+  assert.deepEqual(bottom.calls, [['setCct', 8401, 100]]);
+});
+
+test('a stored cct step the wire cannot carry falls back to the default', async () => {
+  // The temperature travels as one byte of 100 K. An installation saved when the panel
+  // offered 250 K holds that value, and 2500 + 250 = 2750 is not a temperature the frame
+  // can express: the lamp would land somewhere the dial never said. Falling back to a
+  // step on the grid moves it exactly where the panel now says.
+  const light = L({ mode: 'cct', cct: 5600 });
+  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 250 }), LEFT);
+  assert.deepEqual(light.calls, [['setCct', 5400, 100]], 'the default 200 K step, not a rounded 5350');
+
+  // A step below the grid is refused for the same reason.
+  const finer = L({ mode: 'cct', cct: 5600 });
+  await cct.onDialRotate(ctxFor(finer, { ...cct.defaults, step: 50 }), LEFT);
+  assert.deepEqual(finer.calls, [['setCct', 5400, 100]]);
 });
 
 test('cct dial can be told to stop at the ends', async () => {
   const light = L({ mode: 'cct', cct: 8350 });
-  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 250, wrap: 'false' }), RIGHT);
+  await cct.onDialRotate(ctxFor(light, { ...cct.defaults, step: 200, wrap: 'false' }), RIGHT);
   assert.deepEqual(light.calls, [['setCct', 8500, 100]]);
 });
 

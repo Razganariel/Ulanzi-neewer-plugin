@@ -45,6 +45,8 @@ Protocole BLE Neewer « `0x78` », documenté publiquement (reverse engineering 
 
 Il n'existe pas de trame « luminosité seule » : un changement de luminosité renvoie la trame du mode courant (HSL ou CCT), comme le fait l'app.
 
+La température voyage en **un octet de 100 K** : la lampe ne connaît que les multiples de 100 K, et 2550 K n'existe pas. Un pas de molette ou de touche doit donc être un multiple de 100 — 250 K ne l'est pas, et ajouter 250 à 2500 donne 2750, que la trame arrondit : la lampe atterrit ailleurs que là où la molette l'annonçait. Les pas proposés sont 100, 200, 500 et 1000 K, et un réglage plus fin enregistré par erreur retombe sur 200 K plutôt que d'arrondir en silence.
+
 ## 3. Prérequis
 
 - **Windows 10 build 15063+** ( Creators Update )

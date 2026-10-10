@@ -26,7 +26,7 @@ export const uuid = ACTION.CCT;
 
 export const defaults = {
   device: '',
-  step: 250,
+  step: 200,
   min: LIMITS.CCT.min,
   max: LIMITS.CCT.max,
   wrap: true,
@@ -50,9 +50,11 @@ export async function onDialRotate(ctx, message) {
   const dir = rotateSteps(message);
   if (dir === 0) return;
   const { min, max } = bounds(settings);
-  // 100 K is the wire granularity: a step below it would round back onto the
-  // same frame and appear to do nothing.
-  const step = dialStep(settings.step, 100, max - min, defaults.step, [100, 200, 250, 300, 500]);
+  // 100 K is the wire granularity: the temperature travels as one byte of 100 K, so a
+  // step that is not a multiple of 100 lands between two values the protocol can carry.
+  // 250 K was offered here until now, and 2500 + 250 = 2750 is not expressible: the
+  // frame rounds it and the lamp does not land where the dial said it would.
+  const step = dialStep(settings.step, 100, max - min, defaults.step, [100, 200, 500, 1000]);
   const raw = snap.cct + dir * step;
   const next = bool(settings.wrap, defaults.wrap) ? wrap(raw, min, max) : clamp(raw, min, max, snap.cct);
   try {

@@ -15,7 +15,7 @@ import { decodeContext, ensureEntry, forget, forgetActionId, slotOf } from '../p
 const UUID = 'com.ulanzi.ulanzistudio.neewer';
 const actions = {
   [`${UUID}.hue`]: { uuid: `${UUID}.hue`, defaults: { step: 10, presets: '0,30,60' } },
-  [`${UUID}.cct`]: { uuid: `${UUID}.cct`, defaults: { step: 250, presets: '' } },
+  [`${UUID}.cct`]: { uuid: `${UUID}.cct`, defaults: { step: 200, presets: '' } },
 };
 const findAction = (uuid) => actions[uuid];
 
@@ -112,7 +112,7 @@ test('switching actions on one key discards the previous action settings', () =>
   ensureEntry(contexts, ctx('3_3', 'abc'), { uuid: `${UUID}.hue`, param: { step: 30, presets: '0,30' } }, findAction);
   const { entry } = ensureEntry(contexts, ctx('3_3', 'abc'), { uuid: `${UUID}.cct`, param: {} }, findAction);
   assert.equal(entry.action.uuid, `${UUID}.cct`);
-  assert.equal(entry.settings.step, 250, 'CCT default, not the hue 30');
+  assert.equal(entry.settings.step, 200, 'CCT default, not the hue 30');
   assert.equal(entry.settings.presets, '');
 });
 

@@ -70,6 +70,27 @@
     return out;
   }
 
+  /** The two values the SDK's hydration drops on the floor. */
+  const DROPPED_BY_HYDRATION = [0, false];
+
+  /**
+   * Rewrites the fields the SDK emptied but the settings do carry.
+   *
+   * @param {object} settings
+   * @param {HTMLFormElement} form
+   */
+  function restoreFalsyValues(settings, form) {
+    if (!settings || !form) return;
+    const controls = form.elements || [];
+    for (const control of controls) {
+      const value = control.name ? settings[control.name] : undefined;
+      if (value === undefined) continue;
+      if (!DROPPED_BY_HYDRATION.includes(value)) continue;
+      if (control.value === String(value)) continue;
+      control.value = String(value);
+    }
+  }
+
   function bootForm(form, options) {
     sendParams = Utils.debounce((params) => $UD.sendParamFromPlugin(params), 150);
     activeForm = form;
@@ -106,6 +127,13 @@
 
     const applySettings = (settings) => {
       Utils.setFormValue(settings, form);
+      // The SDK ends its hydration with `element.value = value ? value : ''`, so every
+      // setting that is legitimately falsy lands in an empty field: a minimum of 0, a
+      // "wrap: no clamp" choice. The panel then shows nothing at all, which reads as
+      // "not set" rather than "zero", and saving another field writes that emptiness
+      // back. Only values the settings really carry are restored, and only the two the
+      // SDK drops.
+      restoreFalsyValues(settings, form);
       // Mirrors of a raw settings string (the CCT scene list, the preset rows) need
       // the value after hydration, not just the fields the form knows how to draw.
       if (options.onSettings) options.onSettings(settings || {});
