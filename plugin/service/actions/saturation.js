@@ -15,10 +15,10 @@
  * press (see the onDialUp wiring in app.js), so it lives in `onDialPress`.
  */
 
-import { ACTION, LIMITS, STATE } from '../core/constants.js';
+import { ACTION, LIMITS } from '../core/constants.js';
 import { dialBounds, nextValueInList, rotateSteps } from '../core/dial.js';
 import { dialStep } from '../core/params.js';
-import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
+import { setEncoderText, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.SATURATION;
 
@@ -33,8 +33,7 @@ export const defaults = {
 export function render({ $UD, context, snap, isEncoder }) {
   const value = `${snap.saturation}`;
   if (isEncoder) setEncoderText($UD, context, value, 'SAT');
-  setStateIcon($UD, context, STATE.DEFAULT, value);
-  setTitle($UD, context, `sat ${value}`);
+  setTitle($UD, context, value);
 }
 
 export async function onDialRotate(ctx, message) {

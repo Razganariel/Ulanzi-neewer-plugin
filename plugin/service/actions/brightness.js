@@ -10,10 +10,10 @@
  * rather than `onRun`.
  */
 
-import { ACTION, LIMITS, STATE } from '../core/constants.js';
+import { ACTION, LIMITS } from '../core/constants.js';
 import { dialBounds, nextValueInList, rotateSteps } from '../core/dial.js';
 import { bool, clamp, dialStep, wrap } from '../core/params.js';
-import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
+import { setEncoderText, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.BRIGHTNESS;
 
@@ -33,7 +33,6 @@ export const defaults = {
 
 export function render({ $UD, context, snap, isEncoder }) {
   if (isEncoder) setEncoderText($UD, context, snap.brightness, 'BRI %');
-  setStateIcon($UD, context, STATE.DEFAULT, String(snap.brightness));
   setTitle($UD, context, `${snap.brightness}%`);
 }
 

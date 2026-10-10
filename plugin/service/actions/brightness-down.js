@@ -8,7 +8,6 @@ import { stepper } from './stepper.js';
 
 export const { uuid, defaults, render, onRun } = stepper({
   uuid: ACTION.BRIGHTNESS_DOWN,
-  title: (value) => `Brightness down (${value}%)`,
   sign: -1,
   step: 5,
   maxStep: 25,

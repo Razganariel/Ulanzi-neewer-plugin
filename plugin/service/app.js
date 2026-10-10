@@ -10,12 +10,13 @@
 
 import { readFileSync } from 'node:fs';
 import UlanziApi from '../ulanzi-api/index.js';
-import { PLUGIN_UUID, REPAINT_DELAY_MS } from './core/constants.js';
+import { DEFAULTS, PLUGIN_UUID, REPAINT_DELAY_MS } from './core/constants.js';
 import { DeviceRegistry } from './core/devices.js';
 import { findByUuid } from './actions/index.js';
 import { decodeContext, ensureEntry, forget, forgetActionId } from './core/context.js';
 import { buildSettings, emptySettings } from './core/settings.js';
 import { installShutdownHandlers } from './core/shutdown.js';
+import { forgetEncoderLayout, forgetStateIcon } from './core/ui.js';
 
 const $UD = new UlanziApi();
 
@@ -112,6 +113,30 @@ function boundLight(context) {
   return registry.lightFor(boundDeviceId(context));
 }
 
+/**
+ * The snapshot an action reads when no fixture is bound to it.
+ *
+ * It has the same shape as `NeewerLight.snapshot`, including the level fields. Hand-built
+ * without them, a key with no light rendered the literal text "undefined": the value was
+ * read off an object that had never carried one. Defaults are also the honest answer
+ * here - they are what a light shows before anything has ever been commanded to it.
+ */
+function emptySnapshot() {
+  return {
+    address: '',
+    name: '',
+    connected: false,
+    connecting: false,
+    lastError: '',
+    power: DEFAULTS.POWER,
+    mode: DEFAULTS.MODE,
+    brightness: DEFAULTS.BRIGHTNESS,
+    hue: DEFAULTS.HUE,
+    saturation: DEFAULTS.SATURATION,
+    cct: DEFAULTS.CCT,
+  };
+}
+
 function handlerContext(context, isEncoder) {
   const entry = contexts.get(context);
   const action = entry?.action;
@@ -124,7 +149,7 @@ function handlerContext(context, isEncoder) {
     registry,
     light,
     deviceId: boundDeviceId(context),
-    snap: light ? light.snapshot() : { address: '', name: '', connected: false, connecting: false, lastError: '' },
+    snap: light ? light.snapshot() : emptySnapshot(),
     isEncoder,
     devices: scans.get(context) || [],
     report: (err) => report(err, context),
@@ -304,6 +329,10 @@ $UD.onAdd((message) => {
   const context = message.context;
   // Only `add` tells us whether the instance landed on a button or on the dial.
   if (message.controller) controllers.set(context, message.controller);
+  // A key the host has just mounted has none of our drawing on it, whatever the previous
+  // instance of this context had, so the next repaint sends its layout and its icon again.
+  forgetEncoderLayout(context);
+  forgetStateIcon(context);
   const { entry, created } = ensureEntry(contexts, context, message, (uuid) => findByUuid(uuid));
   if (!entry) return;
   // Re-acquiring a context after a removal may not ship with the full settings,
@@ -356,6 +385,9 @@ $UD.onClear((message) => {
     // Dropping the remembered controller with the entry avoids a stale "Encoder"
     // driving setFeedback onto a button.
     controllers.delete(item.context);
+    // The host rebuilds the key, so whatever was drawn on it is gone with it.
+    forgetEncoderLayout(item.context);
+    forgetStateIcon(item.context);
     forget(contexts, item.context);
   }
 });

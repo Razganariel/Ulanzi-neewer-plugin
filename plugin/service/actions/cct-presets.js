@@ -12,9 +12,9 @@
  * restores the colour *and* the brightness together.
  */
 
-import { ACTION, STATE } from '../core/constants.js';
+import { ACTION } from '../core/constants.js';
 import { applyNextScene } from './cct.js';
-import { setStateIcon, setTitle } from '../core/ui.js';
+import { setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.CCT_PRESETS;
 
@@ -26,11 +26,13 @@ export const defaults = {
 
 export function render({ $UD, context, snap }) {
   // No scene number on the key: the service would have to parse the list on every
-  // repaint to know it. The current temperature is truthful either way, and it
-  // reads as "HSL" when the light is in colour mode, where no scene is active.
-  const value = snap.mode === 'cct' ? `${snap.cct}K` : 'HSL';
-  setStateIcon($UD, context, STATE.DEFAULT, value);
-  setTitle($UD, context, `presets (${value})`);
+  // repaint to know it. The current temperature is shown instead, and it is shown
+  // whatever mode the lamp is in. It used to read "HSL" in colour mode, which told the
+  // user nothing about the setting this key is about - and the three dials beside it
+  // show their value either way. The last commanded temperature survives a colour
+  // command untouched, so it is the value a press would move from.
+  const value = `${snap.cct}K`;
+  setTitle($UD, context, value);
 }
 
 export async function onRun(ctx) {

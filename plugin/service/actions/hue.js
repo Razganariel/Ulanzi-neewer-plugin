@@ -10,10 +10,10 @@
  * it walks the presets directly rather than relying on a key press.
  */
 
-import { ACTION, LIMITS, STATE } from '../core/constants.js';
+import { ACTION, LIMITS } from '../core/constants.js';
 import { rotateSteps, walkList } from '../core/dial.js';
 import { clamp, dialStep } from '../core/params.js';
-import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
+import { setEncoderText, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.HUE;
 
@@ -30,8 +30,7 @@ const MAX = LIMITS.HUE.max - 1;
 export function render({ $UD, context, snap, isEncoder }) {
   const value = `${snap.hue}`;
   if (isEncoder) setEncoderText($UD, context, value, 'HUE');
-  setStateIcon($UD, context, STATE.DEFAULT, value);
-  setTitle($UD, context, `hue ${value}`);
+  setTitle($UD, context, value);
 }
 
 /**

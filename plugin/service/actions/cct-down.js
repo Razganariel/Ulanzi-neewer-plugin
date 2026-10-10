@@ -10,19 +10,18 @@
  */
 
 import { ACTION, LIMITS } from '../core/constants.js';
-import { atBound, stepper } from './stepper.js';
+import { atBound, formatCct, stepper } from './stepper.js';
 
 /** The frame carries one byte of 100 K, so nothing finer can be expressed. */
 const QUANTUM = 100;
 
 export const { uuid, defaults, render, onRun } = stepper({
   uuid: ACTION.CCT_DOWN,
-  title: (value) => `CCT down (${value})`,
   sign: -1,
   step: 200,
   maxStep: 1000,
   quantum: QUANTUM,
-  format: (snap) => (snap.mode === 'cct' ? `${snap.cct}K` : 'HSL'),
+  format: formatCct,
   settled: atBound('cct', LIMITS.CCT.min, LIMITS.CCT.max),
   // One argument: setCct keeps whatever brightness the dial or a scene left.
   apply: (light, delta) => light.stepCct(delta),

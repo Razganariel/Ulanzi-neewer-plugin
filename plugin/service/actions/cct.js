@@ -17,10 +17,10 @@
  * A bare "kelvin" is still accepted and keeps the current brightness.
  */
 
-import { ACTION, LIMITS, STATE } from '../core/constants.js';
+import { ACTION, LIMITS } from '../core/constants.js';
 import { dialBounds, rotateSteps, walkList } from '../core/dial.js';
 import { bool, clamp, dialStep, wrap } from '../core/params.js';
-import { setEncoderText, setStateIcon, setTitle } from '../core/ui.js';
+import { setEncoderText, setTitle } from '../core/ui.js';
 
 export const uuid = ACTION.CCT;
 
@@ -39,10 +39,14 @@ function bounds(settings) {
 }
 
 export function render({ $UD, context, snap, isEncoder }) {
-  const value = snap.mode === 'cct' ? `${snap.cct}K` : 'HSL';
+  // The temperature, whatever the lamp is currently doing. It used to show "HSL" while
+  // the lamp was in colour mode, which is a mode and not a level: the key is about the
+  // temperature, and the three dials beside it show their value whatever the mode. The
+  // command itself leaves the remembered temperature alone, so the number shown here is
+  // the one a press would move from.
+  const value = `${snap.cct}K`;
   if (isEncoder) setEncoderText($UD, context, value, 'CCT');
-  setStateIcon($UD, context, STATE.DEFAULT, value);
-  setTitle($UD, context, `${value}`);
+  setTitle($UD, context, value);
 }
 
 export async function onDialRotate(ctx, message) {

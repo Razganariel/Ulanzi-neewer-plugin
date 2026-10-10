@@ -7,7 +7,6 @@ import { stepper } from './stepper.js';
 
 export const { uuid, defaults, render, onRun } = stepper({
   uuid: ACTION.HUE_DOWN,
-  title: (value) => `hue down (${value})`,
   sign: -1,
   step: 30,
   maxStep: 120,
