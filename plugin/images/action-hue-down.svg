@@ -1,0 +1,18 @@
+<svg width="72" height="72" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+  <rect width="72" height="72" rx="12" fill="#1a1a1a"/>
+  <defs>
+    <linearGradient id="hueDownGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff0000"/>
+      <stop offset="17%" stop-color="#ffff00"/>
+      <stop offset="33%" stop-color="#00ff00"/>
+      <stop offset="50%" stop-color="#00ffff"/>
+      <stop offset="67%" stop-color="#0000ff"/>
+      <stop offset="83%" stop-color="#ff00ff"/>
+      <stop offset="100%" stop-color="#ff0000"/>
+    </linearGradient>
+  </defs>
+  <circle cx="36" cy="36" r="23" fill="url(#hueDownGrad)"/>
+  <circle cx="36" cy="36" r="14" fill="#1a1a1a"/>
+  <path d="M 29 33.5 L 36 40.5 L 43 33.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/>
+  <path d="M 29 33.5 L 36 40.5 L 43 33.5" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
