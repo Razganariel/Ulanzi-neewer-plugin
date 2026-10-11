@@ -1,6 +1,6 @@
 {
   "name": "com.ulanzi.ulanzistudio.neewer.ulanziPlugin",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Ulanzi D200X plugin driving a Neewer RGB62 over Bluetooth LE",

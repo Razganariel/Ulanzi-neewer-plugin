@@ -3,7 +3,7 @@
   "Name": "Neewer RGB Control",
   "Description": "Control one or many Neewer BLE studio lights (RGB62 and others) from an Ulanzi D200X. Each key is bound to a registered light.",
   "Icon": "images/plugin.svg",
-  "Version": "0.1.0",
+  "Version": "1.0.0",
   "Category": "Lighting",
   "CodePath": "service/app.js",
   "Type": "JavaScript",

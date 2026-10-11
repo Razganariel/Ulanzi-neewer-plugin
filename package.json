@@ -1,6 +1,6 @@
 {
   "name": "ulanzi-neewer-plugin",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Build tooling for the Ulanzi D200X Neewer RGB62 plugin",
